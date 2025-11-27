@@ -6,9 +6,23 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Bell, Key, Users } from "lucide-react";
+import { User, Bell, Key, Users, Palette } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { toast } from "sonner";
 
 export default function Settings() {
+  const { theme, mode, setTheme, setMode } = useTheme();
+
+  const themes = [
+    { id: "indigo", name: "Indigo", colors: ["hsl(250 80% 60%)", "hsl(280 70% 65%)", "hsl(35 100% 60%)"] },
+    { id: "ocean", name: "Ocean", colors: ["hsl(200 90% 50%)", "hsl(220 80% 55%)", "hsl(180 100% 45%)"] },
+    { id: "sunset", name: "Sunset", colors: ["hsl(15 95% 60%)", "hsl(340 100% 60%)", "hsl(30 100% 60%)"] },
+    { id: "forest", name: "Forest", colors: ["hsl(150 70% 45%)", "hsl(130 65% 50%)", "hsl(80 100% 50%)"] },
+    { id: "cyber", name: "Cyber", colors: ["hsl(280 100% 60%)", "hsl(300 90% 65%)", "hsl(170 100% 50%)"] },
+    { id: "rose", name: "Rose", colors: ["hsl(330 80% 60%)", "hsl(310 75% 65%)", "hsl(20 100% 65%)"] },
+  ];
+
   return (
     <AppLayout>
       <div className="p-6 md:p-8 max-w-4xl">
@@ -19,10 +33,14 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             <TabsTrigger value="profile">
               <User className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Profile</span>
+            </TabsTrigger>
+            <TabsTrigger value="appearance">
+              <Palette className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Theme</span>
             </TabsTrigger>
             <TabsTrigger value="notifications">
               <Bell className="h-4 w-4 mr-2" />
@@ -37,6 +55,95 @@ export default function Settings() {
               <span className="hidden sm:inline">Team</span>
             </TabsTrigger>
           </TabsList>
+
+          {/* Appearance Settings */}
+          <TabsContent value="appearance">
+            <Card className="shadow-medium">
+              <CardHeader>
+                <CardTitle>Appearance Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                {/* Theme Mode */}
+                <div>
+                  <Label className="text-base font-semibold mb-4 block">Mode</Label>
+                  <RadioGroup 
+                    value={mode} 
+                    onValueChange={(value) => {
+                      setMode(value as "light" | "dark");
+                      toast.success("Mode updated");
+                    }}
+                    className="grid grid-cols-2 gap-4"
+                  >
+                    <Label
+                      htmlFor="light"
+                      className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-card p-4 hover:bg-accent hover:border-accent cursor-pointer transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                    >
+                      <RadioGroupItem value="light" id="light" className="sr-only" />
+                      <div className="space-y-2 w-full">
+                        <div className="flex items-center justify-center p-6 rounded-md bg-background border border-border">
+                          <div className="text-foreground font-semibold">Aa</div>
+                        </div>
+                        <div className="text-center font-medium">Light</div>
+                      </div>
+                    </Label>
+                    <Label
+                      htmlFor="dark"
+                      className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-card p-4 hover:bg-accent hover:border-accent cursor-pointer transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                    >
+                      <RadioGroupItem value="dark" id="dark" className="sr-only" />
+                      <div className="space-y-2 w-full">
+                        <div className="flex items-center justify-center p-6 rounded-md bg-slate-900 border border-slate-700">
+                          <div className="text-slate-50 font-semibold">Aa</div>
+                        </div>
+                        <div className="text-center font-medium">Dark</div>
+                      </div>
+                    </Label>
+                  </RadioGroup>
+                </div>
+
+                {/* Color Theme */}
+                <div>
+                  <Label className="text-base font-semibold mb-4 block">Color Theme</Label>
+                  <RadioGroup 
+                    value={theme} 
+                    onValueChange={(value) => {
+                      setTheme(value as any);
+                      toast.success(`${value.charAt(0).toUpperCase() + value.slice(1)} theme applied`);
+                    }}
+                    className="grid grid-cols-2 md:grid-cols-3 gap-4"
+                  >
+                    {themes.map((t) => (
+                      <Label
+                        key={t.id}
+                        htmlFor={t.id}
+                        className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-card p-4 hover:bg-accent hover:border-accent cursor-pointer transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                      >
+                        <RadioGroupItem value={t.id} id={t.id} className="sr-only" />
+                        <div className="space-y-3 w-full">
+                          <div className="flex gap-1.5 justify-center">
+                            {t.colors.map((color, i) => (
+                              <div
+                                key={i}
+                                className="h-8 w-8 rounded-full shadow-soft"
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </div>
+                          <div className="text-center font-medium">{t.name}</div>
+                        </div>
+                      </Label>
+                    ))}
+                  </RadioGroup>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-border">
+                  <p className="text-sm text-muted-foreground">
+                    Theme changes are applied instantly
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Profile Settings */}
           <TabsContent value="profile">
