@@ -7,6 +7,7 @@ All colors MUST be HSL.
 */
 
 @layer base {
+  /* Default Indigo Theme */
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 10%;
@@ -65,6 +66,71 @@ All colors MUST be HSL.
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  /* Ocean Theme */
+  .ocean {
+    --primary: 200 90% 50%;
+    --primary-light: 200 80% 60%;
+    --primary-dark: 200 95% 40%;
+    --accent: 180 100% 45%;
+    --accent-light: 180 90% 55%;
+    --gradient-primary: linear-gradient(135deg, hsl(200 90% 50%) 0%, hsl(220 80% 55%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(180 100% 45%) 0%, hsl(170 90% 40%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(200 90% 50%) 0%, hsl(220 80% 55%) 50%, hsl(180 100% 45%) 100%);
+    --shadow-glow: 0 0 32px hsl(200 90% 50% / 0.25);
+  }
+
+  /* Sunset Theme */
+  .sunset {
+    --primary: 15 95% 60%;
+    --primary-light: 15 85% 70%;
+    --primary-dark: 15 100% 50%;
+    --accent: 340 100% 60%;
+    --accent-light: 340 90% 70%;
+    --gradient-primary: linear-gradient(135deg, hsl(15 95% 60%) 0%, hsl(340 100% 60%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(30 100% 60%) 0%, hsl(15 95% 55%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(15 95% 60%) 0%, hsl(340 100% 60%) 50%, hsl(30 100% 60%) 100%);
+    --shadow-glow: 0 0 32px hsl(15 95% 60% / 0.3);
+  }
+
+  /* Forest Theme */
+  .forest {
+    --primary: 150 70% 45%;
+    --primary-light: 150 60% 55%;
+    --primary-dark: 150 80% 35%;
+    --accent: 80 100% 50%;
+    --accent-light: 80 90% 60%;
+    --gradient-primary: linear-gradient(135deg, hsl(150 70% 45%) 0%, hsl(130 65% 50%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(80 100% 50%) 0%, hsl(70 95% 45%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(150 70% 45%) 0%, hsl(130 65% 50%) 50%, hsl(80 100% 50%) 100%);
+    --shadow-glow: 0 0 32px hsl(150 70% 45% / 0.25);
+  }
+
+  /* Cyber Theme */
+  .cyber {
+    --primary: 280 100% 60%;
+    --primary-light: 280 90% 70%;
+    --primary-dark: 280 100% 50%;
+    --accent: 170 100% 50%;
+    --accent-light: 170 90% 60%;
+    --gradient-primary: linear-gradient(135deg, hsl(280 100% 60%) 0%, hsl(300 90% 65%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(170 100% 50%) 0%, hsl(160 95% 45%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(280 100% 60%) 0%, hsl(300 90% 65%) 50%, hsl(170 100% 50%) 100%);
+    --shadow-glow: 0 0 32px hsl(280 100% 60% / 0.3);
+  }
+
+  /* Rose Theme */
+  .rose {
+    --primary: 330 80% 60%;
+    --primary-light: 330 70% 70%;
+    --primary-dark: 330 90% 50%;
+    --accent: 20 100% 65%;
+    --accent-light: 20 90% 75%;
+    --gradient-primary: linear-gradient(135deg, hsl(330 80% 60%) 0%, hsl(310 75% 65%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(20 100% 65%) 0%, hsl(10 95% 60%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(330 80% 60%) 0%, hsl(310 75% 65%) 50%, hsl(20 100% 65%) 100%);
+    --shadow-glow: 0 0 32px hsl(330 80% 60% / 0.25);
+  }
+
   .dark {
     --background: 240 10% 8%;
     --foreground: 240 5% 96%;
@@ -75,24 +141,17 @@ All colors MUST be HSL.
     --popover: 240 8% 12%;
     --popover-foreground: 240 5% 96%;
 
-    --primary: 250 80% 60%;
-    --primary-foreground: 0 0% 100%;
-
     --secondary: 240 8% 15%;
     --secondary-foreground: 240 5% 96%;
 
     --muted: 240 8% 15%;
     --muted-foreground: 240 5% 60%;
 
-    --accent: 35 100% 60%;
-    --accent-foreground: 0 0% 100%;
-
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 240 8% 20%;
     --input: 240 8% 20%;
-    --ring: 250 80% 60%;
   }
 }
 
