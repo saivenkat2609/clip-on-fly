@@ -1,12 +1,89 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload as UploadIcon, Link as LinkIcon, FileVideo } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { Upload as UploadIcon, Link as LinkIcon, FileVideo, AlertCircle, Loader2 } from "lucide-react";
+
+// Replace this with your actual API Gateway endpoint URL
+const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
 
 export default function Upload() {
+  const [videoUrl, setVideoUrl] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const { currentUser } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const handleProcessVideo = async () => {
+    setError("");
+
+    // Validation
+    if (!videoUrl.trim()) {
+      setError("Please enter a YouTube URL");
+      return;
+    }
+
+    if (!videoUrl.includes("youtube.com") && !videoUrl.includes("youtu.be")) {
+      setError("Please enter a valid YouTube URL");
+      return;
+    }
+
+    if (!currentUser) {
+      setError("Please sign in to process videos");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_ENDPOINT}/process`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.dumps({
+          youtube_url: videoUrl,
+          user_id: currentUser.uid,
+          user_email: currentUser.email || "",
+          project_name: projectName || "Untitled Project"
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to start processing");
+      }
+
+      toast({
+        title: "Processing started!",
+        description: `Your video is being processed. Session ID: ${data.session_id.substring(0, 8)}...`,
+      });
+
+      // Navigate to dashboard to see processing status
+      navigate("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Failed to start video processing");
+      toast({
+        title: "Error",
+        description: err.message || "Failed to start video processing",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="p-6 md:p-8 max-w-4xl mx-auto">
@@ -67,55 +144,85 @@ export default function Upload() {
 
               <TabsContent value="url">
                 <div className="space-y-6">
+                  {/* Error Alert */}
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+
                   {/* URL Input */}
                   <div className="space-y-4">
                     <div>
-                      <Label htmlFor="video-url">Video URL</Label>
+                      <Label htmlFor="video-url">YouTube URL</Label>
                       <div className="flex gap-2 mt-2">
-                        <Input 
-                          id="video-url" 
-                          placeholder="https://youtube.com/watch?v=..." 
+                        <Input
+                          id="video-url"
+                          placeholder="https://youtube.com/watch?v=..."
                           className="flex-1"
+                          value={videoUrl}
+                          onChange={(e) => setVideoUrl(e.target.value)}
+                          disabled={loading}
                         />
-                        <Button>
-                          <LinkIcon className="h-4 w-4" />
-                        </Button>
                       </div>
                       <p className="text-sm text-muted-foreground mt-2">
-                        Supported platforms: YouTube, Vimeo, Google Drive, Dropbox
+                        Paste a YouTube video URL to automatically extract clips
                       </p>
                     </div>
 
                     <div>
-                      <Label htmlFor="project-name-url">Project Name</Label>
-                      <Input 
-                        id="project-name-url" 
-                        placeholder="e.g., Podcast Episode #42" 
+                      <Label htmlFor="project-name-url">Project Name (Optional)</Label>
+                      <Input
+                        id="project-name-url"
+                        placeholder="e.g., Podcast Episode #42"
                         className="mt-2"
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        disabled={loading}
                       />
                     </div>
                   </div>
 
                   {/* URL Preview Placeholder */}
-                  <Card className="bg-muted/30">
-                    <CardContent className="p-6 text-center">
-                      <FileVideo className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">
-                        Video preview will appear here after pasting URL
-                      </p>
-                    </CardContent>
-                  </Card>
+                  {videoUrl && (
+                    <Card className="bg-muted/30">
+                      <CardContent className="p-6 text-center">
+                        <FileVideo className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          Ready to process: {videoUrl}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>
 
             {/* Action Buttons */}
             <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-border">
-              <Button variant="outline" size="lg">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => navigate("/dashboard")}
+                disabled={loading}
+              >
                 Cancel
               </Button>
-              <Button size="lg" className="gradient-primary">
-                Start Processing
+              <Button
+                size="lg"
+                className="gradient-primary"
+                onClick={handleProcessVideo}
+                disabled={loading || !videoUrl}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  "Start Processing"
+                )}
               </Button>
             </div>
           </CardContent>

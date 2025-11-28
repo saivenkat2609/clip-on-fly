@@ -6,13 +6,123 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Bell, Key, Users, Palette } from "lucide-react";
+import { User, Bell, Key, Users, Palette, Mail, Lock, Shield, CheckCircle2, AlertCircle } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { useState } from "react";
 
 export default function Settings() {
   const { theme, mode, setTheme, setMode } = useTheme();
+  const { currentUser, changeEmail, changePassword, resendVerificationEmail } = useAuth();
+
+  // Email change state
+  const [newEmail, setNewEmail] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Email verification state
+  const [verificationLoading, setVerificationLoading] = useState(false);
+
+  const getUserInitials = () => {
+    if (!currentUser) return "??";
+    if (currentUser.displayName) {
+      const names = currentUser.displayName.split(" ");
+      if (names.length >= 2) {
+        return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+      }
+      return currentUser.displayName.substring(0, 2).toUpperCase();
+    }
+    if (currentUser.email) {
+      return currentUser.email.substring(0, 2).toUpperCase();
+    }
+    return "U";
+  };
+
+  const getFirstName = () => {
+    if (!currentUser?.displayName) return "";
+    return currentUser.displayName.split(" ")[0];
+  };
+
+  const getLastName = () => {
+    if (!currentUser?.displayName) return "";
+    const names = currentUser.displayName.split(" ");
+    return names.length > 1 ? names[names.length - 1] : "";
+  };
+
+  const handleEmailChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmail || !emailPassword) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    setEmailLoading(true);
+    try {
+      await changeEmail(newEmail, emailPassword);
+      setNewEmail('');
+      setEmailPassword('');
+      toast.success('Email updated successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update email');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      toast.success('Password updated successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update password');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setVerificationLoading(true);
+    try {
+      await resendVerificationEmail();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send verification email');
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const isGoogleUser = currentUser?.providerData.some(provider => provider.providerId === 'google.com');
 
   const themes = [
     { id: "indigo", name: "Indigo", colors: ["hsl(250 80% 60%)", "hsl(280 70% 65%)", "hsl(35 100% 60%)"] },
@@ -146,40 +256,67 @@ export default function Settings() {
           </TabsContent>
 
           {/* Profile Settings */}
-          <TabsContent value="profile">
+          <TabsContent value="profile" className="space-y-6">
+            {/* Email Verification Status */}
+            {!isGoogleUser && currentUser && !currentUser.emailVerified && (
+              <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-950">
+                <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                <AlertDescription className="flex items-center justify-between">
+                  <div className="text-sm text-orange-800 dark:text-orange-200">
+                    <p className="font-medium">Email not verified</p>
+                    <p className="text-xs mt-1">
+                      Please verify your email address to access all features.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResendVerification}
+                    disabled={verificationLoading}
+                  >
+                    <Mail className="h-3 w-3 mr-1" />
+                    {verificationLoading ? 'Sending...' : 'Resend Email'}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Account Information */}
             <Card className="shadow-medium">
               <CardHeader>
-                <CardTitle>Profile Settings</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Account Information
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center gap-6">
                   <Avatar className="h-20 w-20">
                     <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                      JD
+                      {getUserInitials()}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <Button variant="outline" size="sm">Change Photo</Button>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      JPG, PNG or GIF. Max size 2MB
-                    </p>
+                    <p className="font-semibold text-lg">{currentUser?.displayName || 'User'}</p>
+                    <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
+                    {currentUser?.emailVerified && (
+                      <div className="flex items-center gap-1 mt-1 text-green-600">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span className="text-xs">Verified</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue="John" className="mt-2" />
+                    <Input id="firstName" defaultValue={getFirstName()} className="mt-2" />
                   </div>
                   <div>
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" defaultValue="Doe" className="mt-2" />
+                    <Input id="lastName" defaultValue={getLastName()} className="mt-2" />
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" defaultValue="john@example.com" className="mt-2" />
                 </div>
 
                 <div>
@@ -191,6 +328,155 @@ export default function Settings() {
                   <Button variant="outline">Cancel</Button>
                   <Button className="gradient-primary">Save Changes</Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Email Change */}
+            <Card className="shadow-medium">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5" />
+                  Change Email Address
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isGoogleUser ? (
+                  <Alert>
+                    <Shield className="h-4 w-4" />
+                    <AlertDescription>
+                      Your account uses Google sign-in. To change your email, please update it in your Google account settings.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <form onSubmit={handleEmailChange} className="space-y-4">
+                    <div>
+                      <Label htmlFor="currentEmail">Current Email</Label>
+                      <Input
+                        id="currentEmail"
+                        type="email"
+                        value={currentUser?.email || ''}
+                        disabled
+                        className="mt-2"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="newEmail">New Email</Label>
+                      <Input
+                        id="newEmail"
+                        type="email"
+                        placeholder="newemail@gmail.com"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        disabled={emailLoading}
+                        className="mt-2"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Only Gmail addresses are allowed
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="emailPassword">Current Password</Label>
+                      <Input
+                        id="emailPassword"
+                        type="password"
+                        placeholder="Enter your current password"
+                        value={emailPassword}
+                        onChange={(e) => setEmailPassword(e.target.value)}
+                        disabled={emailLoading}
+                        className="mt-2"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Required for security verification
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t border-border">
+                      <Button
+                        type="submit"
+                        disabled={emailLoading || !newEmail || !emailPassword}
+                      >
+                        {emailLoading ? 'Updating...' : 'Update Email'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Password Change */}
+            <Card className="shadow-medium">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Change Password
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isGoogleUser ? (
+                  <Alert>
+                    <Shield className="h-4 w-4" />
+                    <AlertDescription>
+                      Your account uses Google sign-in and does not have a password. Your security is managed by Google.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <form onSubmit={handlePasswordChange} className="space-y-4">
+                    <div>
+                      <Label htmlFor="currentPassword">Current Password</Label>
+                      <Input
+                        id="currentPassword"
+                        type="password"
+                        placeholder="Enter current password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        disabled={passwordLoading}
+                        className="mt-2"
+                      />
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <Input
+                        id="newPassword"
+                        type="password"
+                        placeholder="Enter new password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        disabled={passwordLoading}
+                        className="mt-2"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Must be at least 8 characters
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+                      <Input
+                        id="confirmNewPassword"
+                        type="password"
+                        placeholder="Confirm new password"
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        disabled={passwordLoading}
+                        className="mt-2"
+                      />
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t border-border">
+                      <Button
+                        type="submit"
+                        disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
+                      >
+                        {passwordLoading ? 'Updating...' : 'Update Password'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -313,7 +599,11 @@ export default function Settings() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {[
-                  { name: "John Doe", email: "john@example.com", role: "Owner" },
+                  {
+                    name: currentUser?.displayName || "User",
+                    email: currentUser?.email || "",
+                    role: "Owner"
+                  },
                   { name: "Sarah Chen", email: "sarah@example.com", role: "Admin" },
                   { name: "Mike Johnson", email: "mike@example.com", role: "Member" }
                 ].map((member, i) => (

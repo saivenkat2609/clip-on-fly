@@ -1,9 +1,33 @@
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Play, Clock, Calendar } from "lucide-react";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { useAuth } from "@/contexts/AuthContext";
+import { Plus, Play, Clock, Calendar, Loader2, AlertCircle, Download } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
+
+interface VideoClip {
+  clip_index: number;
+  download_url: string;
+  s3_key: string;
+}
+
+interface Video {
+  session_id: string;
+  status: string;
+  clips_count: number;
+  video_info?: {
+    title?: string;
+    duration?: number;
+  };
+  created_at: string;
+  clips?: VideoClip[];
+}
 
 const projects = [
   {
@@ -63,9 +87,53 @@ const projects = [
 ];
 
 export default function Dashboard() {
+  const { currentUser } = useAuth();
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchUserVideos();
+    }
+  }, [currentUser]);
+
+  const fetchUserVideos = async () => {
+    if (!currentUser) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(`${API_ENDPOINT}/user/${currentUser.uid}/videos`);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch videos");
+      }
+
+      const data = await response.json();
+      setVideos(data.videos || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to load videos");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="p-6 md:p-8 space-y-8">
+        {/* Email Verification Banner */}
+        <EmailVerificationBanner />
+
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -83,10 +151,30 @@ export default function Dashboard() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "Total Projects", value: "24", change: "+3 this month" },
-            { label: "Clips Generated", value: "156", change: "+28 this week" },
-            { label: "Processing Time", value: "12.5h", change: "Saved this month" },
-            { label: "Storage Used", value: "8.2 GB", change: "of 50 GB" }
+            {
+              label: "Total Videos",
+              value: loading ? "..." : videos.length.toString(),
+              change: `${videos.filter(v => v.status === 'completed').length} completed`
+            },
+            {
+              label: "Clips Generated",
+              value: loading ? "..." : videos.reduce((sum, v) => sum + (v.clips_count || 0), 0).toString(),
+              change: "Total clips"
+            },
+            {
+              label: "Processing",
+              value: loading ? "..." : videos.filter(v => v.status === 'processing').length.toString(),
+              change: "Videos in queue"
+            },
+            {
+              label: "This Month",
+              value: loading ? "..." : videos.filter(v => {
+                const date = new Date(v.created_at);
+                const now = new Date();
+                return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+              }).length.toString(),
+              change: "Videos processed"
+            }
           ].map((stat) => (
             <Card key={stat.label} className="shadow-soft">
               <CardContent className="p-6">
@@ -101,40 +189,84 @@ export default function Dashboard() {
         {/* Projects Grid */}
         <div>
           <h2 className="text-xl font-bold mb-4">Recent Projects</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <Link key={project.id} to={`/editor/${project.id}`}>
-                <Card className="group overflow-hidden shadow-medium hover:shadow-large transition-smooth cursor-pointer">
+
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : videos.length === 0 ? (
+            <Card className="shadow-soft">
+              <CardContent className="p-12 text-center">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">No videos yet</h3>
+                <p className="text-muted-foreground mb-4">
+                  Upload your first video to start creating clips
+                </p>
+                <Link to="/upload">
+                  <Button className="gradient-primary">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Upload Video
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {videos.map((video) => (
+                <Card
+                  key={video.session_id}
+                  className="group overflow-hidden shadow-medium hover:shadow-large transition-smooth"
+                >
                   <div className="relative aspect-video overflow-hidden bg-muted">
-                    <img 
-                      src={project.thumbnail} 
-                      alt={project.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-smooth"
-                    />
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-smooth flex items-center justify-center">
-                      <Play className="h-12 w-12 text-white" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                      <Play className="h-16 w-16 text-white/80" />
                     </div>
-                    <Badge className="absolute top-2 right-2 bg-black/70 text-white">
-                      {project.clips} clips
+                    <Badge
+                      className={`absolute top-2 right-2 ${
+                        video.status === 'completed'
+                          ? 'bg-green-500'
+                          : video.status === 'processing'
+                          ? 'bg-blue-500'
+                          : 'bg-gray-500'
+                      } text-white`}
+                    >
+                      {video.status === 'completed' ? `${video.clips_count} clips` : video.status}
                     </Badge>
                   </div>
                   <CardContent className="p-4">
-                    <h3 className="font-semibold mb-2 line-clamp-1">{project.title}</h3>
+                    <h3 className="font-semibold mb-2 line-clamp-1">
+                      {video.video_info?.title || `Video ${video.session_id.substring(0, 8)}`}
+                    </h3>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        <span>{project.duration}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
-                        <span>{project.date}</span>
+                        <span>{new Date(video.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
+
+                    {video.status === 'completed' && video.clips && video.clips.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground mb-2">Download Clips:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {video.clips.map((clip) => (
+                            <a
+                              key={clip.clip_index}
+                              href={clip.download_url}
+                              download
+                              className="text-xs px-2 py-1 bg-primary/10 hover:bg-primary/20 rounded flex items-center gap-1"
+                            >
+                              <Download className="h-3 w-3" />
+                              Clip {clip.clip_index + 1}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
-              </Link>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </AppLayout>

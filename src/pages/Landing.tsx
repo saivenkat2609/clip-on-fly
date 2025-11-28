@@ -152,10 +152,10 @@ export default function Landing() {
               <span className="text-xl font-bold">ClipForge</span>
             </div>
             <div className="flex items-center gap-4">
-              <Link to="/dashboard">
+              <Link to="/login">
                 <Button variant="ghost">Sign In</Button>
               </Link>
-              <Link to="/dashboard">
+              <Link to="/login">
                 <Button className="gradient-primary">Get Started</Button>
               </Link>
             </div>
@@ -173,7 +173,7 @@ export default function Landing() {
             AI-powered video repurposing that turns your content into engaging short-form videos in minutes
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Link to="/dashboard">
+            <Link to="/login">
               <Button size="lg" className="gradient-primary shadow-glow text-lg h-14 px-8">
                 Start Creating Free
               </Button>
@@ -350,7 +350,7 @@ export default function Landing() {
               <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
                 Join thousands of creators who are already making viral content with ClipForge
               </p>
-              <Link to="/dashboard">
+              <Link to="/login">
                 <Button size="lg" variant="secondary" className="text-lg h-14 px-8">
                   Start Creating Now
                 </Button>
