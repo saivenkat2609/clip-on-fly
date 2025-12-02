@@ -207,7 +207,7 @@ UPLOAD_EXPIRY=3600
 
 ### Test 1: Check if endpoint exists
 ```bash
-curl -X POST https://g78mc4ok92.execute-api.us-east-1.amazonaws.com/prod/upload/generate-url \
+curl -X POST funtionURL/prod/upload/generate-url \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "test",
