@@ -166,14 +166,118 @@ export function UploadHero() {
     setUploadingFile(true);
 
     try {
-      // For now, redirect to upload page with file info
-      // You'll need to implement actual file upload to your backend/S3
-      toast({
-        title: "Upload Feature",
-        description: "File upload is not yet implemented. Please use the full upload page.",
+      // Step 1: Generate session ID
+      const sessionId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      console.log(`[Upload] Starting upload for session: ${sessionId}`);
+
+      // Step 2: Get pre-signed upload URL from Lambda
+      const uploadUrlResponse = await fetch(`${API_ENDPOINT}/upload`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "generate",
+          session_id: sessionId,
+          fileName: selectedFile.name,
+          fileSize: selectedFile.size,
+          contentType: selectedFile.type,
+          user_id: currentUser.uid,
+          user_email: currentUser.email || ""
+        }),
       });
-      navigate("/upload");
+
+      if (!uploadUrlResponse.ok) {
+        const errorData = await uploadUrlResponse.json();
+        throw new Error(errorData.error || "Failed to generate upload URL");
+      }
+
+      const { uploadUrl, s3Key } = await uploadUrlResponse.json();
+      console.log(`[Upload] Got pre-signed URL, uploading to S3...`);
+
+      toast({
+        title: "Uploading...",
+        description: `Uploading ${selectedFile.name} to storage`,
+      });
+
+      // Step 3: Upload file directly to S3 using pre-signed URL
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": selectedFile.type,
+          "Content-Length": selectedFile.size.toString(),
+        },
+        body: selectedFile,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload to S3 failed: ${uploadResponse.statusText}`);
+      }
+
+      console.log(`[Upload] File uploaded to S3 successfully`);
+
+      // Step 4: Start state machine processing
+      const processResponse = await fetch(`${API_ENDPOINT}/process`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          s3_video_key: s3Key,
+          user_id: currentUser.uid,
+          user_email: currentUser.email || "",
+          video_title: selectedFile.name.replace(/\.[^/.]+$/, ""), // Remove extension
+          video_description: "Uploaded from dashboard",
+          startFrom: "verify" // Start from verify step in state machine
+        }),
+      });
+
+      if (!processResponse.ok) {
+        const errorData = await processResponse.json();
+        throw new Error(errorData.error || "Failed to start processing");
+      }
+
+      const processData = await processResponse.json();
+      console.log(`[Upload] Processing started:`, processData);
+
+      // Step 5: Create video document in Firestore
+      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
+      await setDoc(videoDocRef, {
+        sessionId: sessionId,
+        youtubeUrl: "", // Not from YouTube
+        projectName: selectedFile.name.replace(/\.[^/.]+$/, ""),
+        status: "processing",
+        createdAt: serverTimestamp(),
+        videoInfo: {
+          title: selectedFile.name.replace(/\.[^/.]+$/, ""),
+          duration: 0,
+          description: "Uploaded from dashboard",
+          thumbnail: "",
+        },
+        s3VideoKey: s3Key,
+        uploadedFile: true,
+        clips: [],
+        error: null
+      });
+
+      // Increment user's totalVideos count
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        totalVideos: increment(1)
+      });
+
+      toast({
+        title: "Upload Successful!",
+        description: "Your video is being processed. Check recent projects below.",
+      });
+
+      // Clear the selected file
+      clearSelectedFile();
+
     } catch (err: any) {
+      console.error("[Upload] Error:", err);
       toast({
         title: "Upload Failed",
         description: err.message || "Failed to upload video",
