@@ -10,6 +10,9 @@ import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/fir
 import { db } from "@/lib/firebase";
 
 const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
+const API_ENDPOINT2 =
+  import.meta.env.VITE_API_ENDPOINT2 ||
+  "https://your-api-gateway-url.amazonaws.com/prod";
 
 export function UploadHero() {
   const [videoUrl, setVideoUrl] = useState("");
@@ -166,34 +169,45 @@ export function UploadHero() {
     setUploadingFile(true);
 
     try {
-      // Step 1: Generate session ID
-      const sessionId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      console.log(`[Upload] Starting upload for session: ${sessionId}`);
+      console.log(`[Upload] Starting upload...`);
+      console.log(`[Upload] API Endpoint: ${API_ENDPOINT2}`);
+      console.log(`[Upload] Full URL: ${API_ENDPOINT2}/upload/generate-url`);
 
       // Step 2: Get pre-signed upload URL from Lambda
-      const uploadUrlResponse = await fetch(`${API_ENDPOINT}/upload`, {
+      const uploadUrlResponse = await fetch(`${API_ENDPOINT2}/upload/generate-url`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          action: "generate",
-          session_id: sessionId,
+          user_id: currentUser.uid,
+          user_email: currentUser.email || "",
           fileName: selectedFile.name,
           fileSize: selectedFile.size,
           contentType: selectedFile.type,
-          user_id: currentUser.uid,
-          user_email: currentUser.email || ""
+          videoTitle: selectedFile.name.replace(/\.[^/.]+$/, ""),
+          videoDescription: "Uploaded from dashboard"
         }),
+      }).catch(err => {
+        console.error("[Upload] Fetch error:", err);
+        throw new Error(`Network error: ${err.message}. Please check if the API endpoint is accessible.`);
       });
 
+      console.log(`[Upload] Response status: ${uploadUrlResponse.status}`);
+
       if (!uploadUrlResponse.ok) {
-        const errorData = await uploadUrlResponse.json();
-        throw new Error(errorData.error || "Failed to generate upload URL");
+        let errorData;
+        try {
+          errorData = await uploadUrlResponse.json();
+        } catch (e) {
+          const text = await uploadUrlResponse.text();
+          console.error("[Upload] Error response:", text);
+          throw new Error(`API returned ${uploadUrlResponse.status}: ${text}`);
+        }
+        throw new Error(errorData.error || errorData.message || "Failed to generate upload URL");
       }
 
-      const { uploadUrl, s3Key } = await uploadUrlResponse.json();
+      const { session_id, uploadUrl, s3_key } = await uploadUrlResponse.json();
       console.log(`[Upload] Got pre-signed URL, uploading to S3...`);
 
       toast({
@@ -218,34 +232,32 @@ export function UploadHero() {
       console.log(`[Upload] File uploaded to S3 successfully`);
 
       // Step 4: Start state machine processing
-      const processResponse = await fetch(`${API_ENDPOINT}/process`, {
+      const processResponse = await fetch(`${API_ENDPOINT2}/upload/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          session_id: sessionId,
-          s3_video_key: s3Key,
+          session_id: session_id,
           user_id: currentUser.uid,
           user_email: currentUser.email || "",
-          video_title: selectedFile.name.replace(/\.[^/.]+$/, ""), // Remove extension
-          video_description: "Uploaded from dashboard",
-          startFrom: "verify" // Start from verify step in state machine
+          videoTitle: selectedFile.name.replace(/\.[^/.]+$/, ""),
+          videoDescription: "Uploaded from dashboard"
         }),
       });
 
       if (!processResponse.ok) {
         const errorData = await processResponse.json();
-        throw new Error(errorData.error || "Failed to start processing");
+        throw new Error(errorData.error || errorData.message || "Failed to start processing");
       }
 
       const processData = await processResponse.json();
       console.log(`[Upload] Processing started:`, processData);
 
       // Step 5: Create video document in Firestore
-      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
+      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, session_id);
       await setDoc(videoDocRef, {
-        sessionId: sessionId,
+        sessionId: session_id,
         youtubeUrl: "", // Not from YouTube
         projectName: selectedFile.name.replace(/\.[^/.]+$/, ""),
         status: "processing",
@@ -256,7 +268,7 @@ export function UploadHero() {
           description: "Uploaded from dashboard",
           thumbnail: "",
         },
-        s3VideoKey: s3Key,
+        s3VideoKey: s3_key,
         uploadedFile: true,
         clips: [],
         error: null
