@@ -235,7 +235,7 @@ curl -X PUT "{uploadUrl}" \
 
 ### Test 3: Start processing
 ```bash
-curl -X POST https://g78mc4ok92.execute-api.us-east-1.amazonaws.com/prod/upload/start \
+curl -X POST functionURL/prod/upload/start \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "SESSION_ID_FROM_TEST_1",

@@ -10,9 +10,7 @@ import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/fir
 import { db } from "@/lib/firebase";
 
 const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
-const API_ENDPOINT2 =
-  import.meta.env.VITE_API_ENDPOINT2 ||
-  "https://your-api-gateway-url.amazonaws.com/prod";
+
 
 export function UploadHero() {
   const [videoUrl, setVideoUrl] = useState("");
@@ -170,11 +168,11 @@ export function UploadHero() {
 
     try {
       console.log(`[Upload] Starting upload...`);
-      console.log(`[Upload] API Endpoint: ${API_ENDPOINT2}`);
-      console.log(`[Upload] Full URL: ${API_ENDPOINT2}/upload/generate-url`);
+      console.log(`[Upload] API Endpoint: ${API_ENDPOINT}`);
+      console.log(`[Upload] Full URL: ${API_ENDPOINT}/upload/generate-url`);
 
       // Step 2: Get pre-signed upload URL from Lambda
-      const uploadUrlResponse = await fetch(`${API_ENDPOINT2}/upload/generate-url`, {
+      const uploadUrlResponse = await fetch(`${API_ENDPOINT}/upload/generate-url`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -232,7 +230,7 @@ export function UploadHero() {
       console.log(`[Upload] File uploaded to S3 successfully`);
 
       // Step 4: Start state machine processing
-      const processResponse = await fetch(`${API_ENDPOINT2}/upload/start`, {
+      const processResponse = await fetch(`${API_ENDPOINT}/upload/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
