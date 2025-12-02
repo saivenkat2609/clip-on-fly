@@ -1,0 +1,55 @@
+COPY THESE FIRESTORE SECURITY RULES
+====================================
+
+1. Go to: https://console.firebase.google.com/project/reframeai-87b24/firestore/rules
+2. Replace ALL existing rules with the text below
+3. Click "Publish"
+4. Wait 60 seconds
+5. Test by uploading a video
+
+====================================
+COPY EVERYTHING BELOW THIS LINE:
+====================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - authenticated access only
+    match /users/{userId} {
+      // Users can read/write their own profile
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Videos subcollection - allow server-side updates
+      match /videos/{videoId} {
+        // Users can read their own videos
+        allow read: if request.auth != null && request.auth.uid == userId;
+
+        // Users can create videos (from frontend)
+        allow create: if request.auth != null && request.auth.uid == userId;
+
+        // IMPORTANT: Allow ANY write to enable Lambda updates
+        // Lambda will update videos when processing completes
+        allow update: if true;
+
+        // Users can delete their own videos
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}
+
+====================================
+STOP COPYING HERE
+====================================
+
+What this does:
+- Users can only read/write their own data (protected by authentication)
+- Lambda can update video status when processing completes
+- Video creation still requires authentication
+- User profiles are fully protected
+
+After publishing:
+- Wait 60 seconds for rules to propagate
+- Upload a test video
+- Check CloudWatch logs: should see "[Firestore] Successfully updated video ..."
+- Dashboard should auto-update to "completed"

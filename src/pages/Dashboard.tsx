@@ -4,29 +4,72 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { VideoThumbnail } from "@/components/VideoThumbnail";
+import { UploadHero } from "@/components/UploadHero";
+import { FAQSection } from "@/components/FAQSection";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Play, Clock, Calendar, Loader2, AlertCircle, Download } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Plus, Play, Calendar, Loader2, AlertCircle, Bell } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
-const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
+import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Zap } from "lucide-react";
 
 interface VideoClip {
-  clip_index: number;
-  download_url: string;
-  s3_key: string;
+  clipIndex: number;
+  downloadUrl: string;
+  s3Key: string;
+  duration?: number;
+  startTime?: number;
+  endTime?: number;
+  title?: string;
+  virality_score?: number;
+  score_breakdown?: {
+    hook: number;
+    flow: number;
+    engagement: number;
+    trend: number;
+  };
 }
 
 interface Video {
-  session_id: string;
-  status: string;
-  clips_count: number;
-  video_info?: {
+  id: string;
+  sessionId: string;
+  youtubeUrl: string;
+  projectName: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  createdAt: any;
+  completedAt?: any;
+  videoInfo?: {
     title?: string;
     duration?: number;
+    thumbnail?: string;
   };
-  created_at: string;
   clips?: VideoClip[];
+  error?: string;
+}
+
+interface Notification {
+  id: string;
+  type: "success" | "info" | "warning" | "error";
+  title: string;
+  message: string;
+  createdAt: any;
+  read: boolean;
 }
 
 const projects = [
@@ -88,41 +131,155 @@ const projects = [
 
 export default function Dashboard() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [remainingCredits, setRemainingCredits] = useState<number>(0);
+  const [totalCredits, setTotalCredits] = useState<number>(0);
+  const [loadingCredits, setLoadingCredits] = useState(true);
+  const [userPlan, setUserPlan] = useState<string>("Free");
+  const [creditsExpiry, setCreditsExpiry] = useState<Date | null>(null);
 
   useEffect(() => {
-    if (currentUser) {
-      fetchUserVideos();
+    if (!currentUser) {
+      setLoading(false);
+      setLoadingCredits(false);
+      return;
     }
+
+    // Set up real-time listener for user's videos
+    const videosRef = collection(db, `users/${currentUser.uid}/videos`);
+    const q = query(videosRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const videosData: Video[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Video));
+
+        setVideos(videosData);
+        setLoading(false);
+        setError("");
+      },
+      (err) => {
+        console.error("Error fetching videos:", err);
+        setError("Failed to load videos. Please try again.");
+        setLoading(false);
+      }
+    );
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, [currentUser]);
 
-  const fetchUserVideos = async () => {
+  // Fetch user credits and notifications
+  useEffect(() => {
     if (!currentUser) return;
 
-    setLoading(true);
-    setError("");
+    const fetchUserData = async () => {
+      try {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
-    try {
-      const response = await fetch(`${API_ENDPOINT}/user/${currentUser.uid}/videos`);
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          const plan = userData.plan || "Free";
+          setUserPlan(plan);
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch videos");
+          // Get total credits based on plan
+          let planCredits = userData.totalCredits || 60;
+          if (!userData.totalCredits) {
+            // Set default credits based on plan
+            planCredits = plan === "Professional" ? 500 : plan === "Starter" ? 300 : 60;
+          }
+          setTotalCredits(planCredits);
+
+          // Check if credits need to be renewed (first of the month)
+          const now = new Date();
+          let expiryDate = userData.creditsExpiryDate?.toDate() || null;
+
+          if (!expiryDate || now >= expiryDate) {
+            // Renew credits - set expiry to first of next month
+            expiryDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+            await updateDoc(userDocRef, {
+              creditsExpiryDate: expiryDate,
+              totalCredits: planCredits
+            });
+          }
+
+          setCreditsExpiry(expiryDate);
+        }
+        setLoadingCredits(false);
+      } catch (err) {
+        console.error("Error fetching user data:", err);
+        setLoadingCredits(false);
       }
+    };
 
-      const data = await response.json();
-      setVideos(data.videos || []);
-    } catch (err: any) {
-      setError(err.message || "Failed to load videos");
-    } finally {
-      setLoading(false);
+    fetchUserData();
+
+    // Set up real-time listener for notifications
+    const notificationsRef = collection(db, `users/${currentUser.uid}/notifications`);
+    const notifQuery = query(notificationsRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribeNotifications = onSnapshot(
+      notifQuery,
+      (snapshot) => {
+        const notificationsData: Notification[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Notification));
+
+        setNotifications(notificationsData);
+      },
+      (err) => {
+        console.error("Error fetching notifications:", err);
+      }
+    );
+
+    return () => unsubscribeNotifications();
+  }, [currentUser]);
+
+  // Calculate remaining credits based on video durations
+  useEffect(() => {
+    if (!videos || videos.length === 0 || totalCredits === 0) {
+      setRemainingCredits(totalCredits);
+      return;
     }
+
+    // Calculate used credits (sum of all video durations in minutes)
+    const usedCredits = videos.reduce((sum, video) => {
+      if (video.videoInfo?.duration) {
+        // Duration is in seconds, convert to minutes and round down
+        return sum + Math.floor(video.videoInfo.duration / 60);
+      }
+      return sum;
+    }, 0);
+
+    const remaining = Math.max(0, totalCredits - usedCredits);
+    setRemainingCredits(remaining);
+  }, [videos, totalCredits]);
+
+  const unreadNotifications = notifications.filter(n => !n.read).length;
+
+  // Calculate days until credits expire
+  const getDaysUntilExpiry = () => {
+    if (!creditsExpiry) return null;
+    const now = new Date();
+    const diffTime = creditsExpiry.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
   };
+
+  const daysUntilExpiry = getDaysUntilExpiry();
 
   return (
     <AppLayout>
-      <div className="p-6 md:p-8 space-y-8">
+      <div className="p-6 md:p-8 space-y-6">
         {/* Email Verification Banner */}
         <EmailVerificationBanner />
 
@@ -140,16 +297,155 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold mb-2">My Projects</h1>
             <p className="text-muted-foreground">Manage and edit your video projects</p>
           </div>
-          <Link to="/upload">
-            <Button size="lg" className="gradient-primary shadow-medium">
+          <div className="flex items-center gap-3">
+            {/* Notifications */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="relative">
+                  <Bell className="h-5 w-5" />
+                  {unreadNotifications > 0 && (
+                    <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs">
+                      {unreadNotifications}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  <span>Notifications</span>
+                  {unreadNotifications > 0 && (
+                    <Badge variant="secondary">{unreadNotifications} new</Badge>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <ScrollArea className="h-[300px]">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No notifications yet
+                    </div>
+                  ) : (
+                    notifications.slice(0, 10).map((notif) => (
+                      <DropdownMenuItem
+                        key={notif.id}
+                        className={`flex flex-col items-start p-3 cursor-pointer ${
+                          !notif.read ? 'bg-primary/5' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-2 w-full">
+                          <div
+                            className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${
+                              notif.type === 'success'
+                                ? 'bg-green-500'
+                                : notif.type === 'error'
+                                ? 'bg-red-500'
+                                : notif.type === 'warning'
+                                ? 'bg-yellow-500'
+                                : 'bg-blue-500'
+                            }`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">{notif.title}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {notif.message}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {notif.createdAt?.toDate
+                                ? notif.createdAt.toDate().toLocaleString()
+                                : new Date(notif.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </ScrollArea>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Credits Display with Hover Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-1.5 px-3 py-2 h-auto hover:bg-accent"
+                >
+                  <Zap className="h-5 w-5 text-yellow-500 fill-yellow-500" />
+                  <span className="text-lg font-bold">
+                    {loadingCredits ? "..." : remainingCredits.toLocaleString()}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-0" align="end">
+                <div className="p-4 space-y-4">
+                  {/* Plan Info */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">{userPlan} Plan</span>
+                    <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/20">
+                      Active
+                    </Badge>
+                  </div>
+
+                  {/* Credits Info */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-muted-foreground">Credits</span>
+                      <div className="flex items-center gap-1.5">
+                        <Zap className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                        <span className="text-lg font-bold">
+                          {remainingCredits.toLocaleString()} / {totalCredits.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {remainingCredits} minutes remaining
+                    </p>
+                    {daysUntilExpiry !== null && (
+                      <p className="text-xs text-muted-foreground">
+                        Renews on {creditsExpiry?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => navigate('/billing')}
+                      className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
+                    >
+                      Add more credits
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        // TODO: Navigate to credits info page or open modal
+                        console.log("Learn how credits work");
+                      }}
+                    >
+                      Learn how credits work
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Add More Credits Button */}
+            <Button
+              onClick={() => navigate('/billing')}
+              size="lg"
+              className="gradient-primary shadow-medium"
+            >
               <Plus className="h-5 w-5 mr-2" />
-              New Project
+              Add Credits
             </Button>
-          </Link>
+          </div>
         </div>
 
+        {/* Upload Hero Section */}
+        <UploadHero />
+
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
               label: "Total Videos",
@@ -158,7 +454,7 @@ export default function Dashboard() {
             },
             {
               label: "Clips Generated",
-              value: loading ? "..." : videos.reduce((sum, v) => sum + (v.clips_count || 0), 0).toString(),
+              value: loading ? "..." : videos.reduce((sum, v) => sum + (v.clips?.length || 0), 0).toString(),
               change: "Total clips"
             },
             {
@@ -169,26 +465,27 @@ export default function Dashboard() {
             {
               label: "This Month",
               value: loading ? "..." : videos.filter(v => {
-                const date = new Date(v.created_at);
+                if (!v.createdAt) return false;
+                const date = v.createdAt.toDate ? v.createdAt.toDate() : new Date(v.createdAt);
                 const now = new Date();
                 return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
               }).length.toString(),
               change: "Videos processed"
             }
           ].map((stat) => (
-            <Card key={stat.label} className="shadow-soft">
-              <CardContent className="p-6">
-                <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
-                <p className="text-3xl font-bold mb-1">{stat.value}</p>
+            <Card key={stat.label} className="shadow-soft border-border/50 hover:border-primary/20 transition-colors">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">{stat.label}</p>
+                <p className="text-2xl font-bold mb-1">{stat.value}</p>
                 <p className="text-xs text-muted-foreground">{stat.change}</p>
               </CardContent>
             </Card>
           ))}
-        </div>
+        </div> */}
 
         {/* Projects Grid */}
         <div>
-          <h2 className="text-xl font-bold mb-4">Recent Projects</h2>
+          <h2 className="text-lg font-bold mb-3">Recent Projects</h2>
 
           {loading ? (
             <div className="flex justify-center items-center py-12">
@@ -211,63 +508,92 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {videos.map((video) => (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {videos.slice(0, 8).map((video) => (
                 <Card
-                  key={video.session_id}
-                  className="group overflow-hidden shadow-medium hover:shadow-large transition-smooth"
+                  key={video.id}
+                  className="group overflow-hidden shadow-soft hover:shadow-medium transition-all duration-300 cursor-pointer border-border/50 hover:border-primary/50"
+                  onClick={() => navigate(`/project/${video.sessionId}`)}
                 >
                   <div className="relative aspect-video overflow-hidden bg-muted">
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      <Play className="h-16 w-16 text-white/80" />
-                    </div>
+                    {/* Show clip thumbnail for completed videos, YouTube thumbnail for others */}
+                    {video.status === 'completed' && video.clips && video.clips.length > 0 ? (
+                      <VideoThumbnail
+                        videoUrl={video.clips[0].downloadUrl}
+                        alt={video.videoInfo?.title || (video.projectName !== "Untitled Project" ? video.projectName : null) || `Video ${video.sessionId.substring(0, 8)}`}
+                        showPlayButton={true}
+                      />
+                    ) : video.videoInfo?.thumbnail ? (
+                      <img
+                        src={video.videoInfo.thumbnail}
+                        alt={video.videoInfo.title || video.projectName}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                        <Play className="h-12 w-12 text-white/70 group-hover:scale-110 transition-transform" />
+                      </div>
+                    )}
+
                     <Badge
-                      className={`absolute top-2 right-2 ${
+                      className={`absolute top-2 right-2 z-10 text-xs ${
                         video.status === 'completed'
                           ? 'bg-green-500'
                           : video.status === 'processing'
                           ? 'bg-blue-500'
+                          : video.status === 'failed'
+                          ? 'bg-red-500'
                           : 'bg-gray-500'
-                      } text-white`}
+                      } text-white shadow-sm`}
                     >
-                      {video.status === 'completed' ? `${video.clips_count} clips` : video.status}
+                      {video.status === 'completed'
+                        ? `${video.clips?.length || 0} clips`
+                        : video.status}
                     </Badge>
                   </div>
-                  <CardContent className="p-4">
-                    <h3 className="font-semibold mb-2 line-clamp-1">
-                      {video.video_info?.title || `Video ${video.session_id.substring(0, 8)}`}
+                  <CardContent className="p-3">
+                    <h3 className="font-semibold text-sm mb-1.5 line-clamp-1 group-hover:text-primary transition-colors">
+                      {video.videoInfo?.title || (video.projectName !== "Untitled Project" ? video.projectName : null) || `Video ${video.sessionId.substring(0, 8)}`}
                     </h3>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        <span>{new Date(video.created_at).toLocaleDateString()}</span>
-                      </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Calendar className="h-3 w-3" />
+                      <span>
+                        {video.createdAt?.toDate
+                          ? video.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                          : new Date(video.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
                     </div>
 
-                    {video.status === 'completed' && video.clips && video.clips.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-border">
-                        <p className="text-xs text-muted-foreground mb-2">Download Clips:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {video.clips.map((clip) => (
-                            <a
-                              key={clip.clip_index}
-                              href={clip.download_url}
-                              download
-                              className="text-xs px-2 py-1 bg-primary/10 hover:bg-primary/20 rounded flex items-center gap-1"
-                            >
-                              <Download className="h-3 w-3" />
-                              Clip {clip.clip_index + 1}
-                            </a>
-                          ))}
-                        </div>
+                    {video.status === 'failed' && video.error && (
+                      <div className="mt-2 pt-2 border-t border-border">
+                        <p className="text-xs text-red-500 line-clamp-1">{video.error}</p>
                       </div>
                     )}
                   </CardContent>
                 </Card>
-              ))}
-            </div>
+                ))}
+              </div>
+
+              {/* Show More Button */}
+              {videos.length > 8 && (
+                <div className="flex justify-center mt-6">
+                  <Button
+                    onClick={() => navigate('/projects')}
+                    variant="outline"
+                    size="lg"
+                    className="gap-2"
+                  >
+                    View All Projects ({videos.length})
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
+
+        {/* FAQ Section */}
+        <FAQSection />
       </div>
     </AppLayout>
   );

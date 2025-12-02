@@ -1,0 +1,344 @@
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { Upload, Link as LinkIcon, Sparkles, Type, Crop, Loader2, FileVideo, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
+
+export function UploadHero() {
+  const [videoUrl, setVideoUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { currentUser } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const handleQuickProcess = async () => {
+    if (!videoUrl.trim()) {
+      toast({
+        title: "URL Required",
+        description: "Please enter a YouTube or Twitch URL to continue",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!videoUrl.includes("youtube.com") && !videoUrl.includes("youtu.be") && !videoUrl.includes("twitch.tv")) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid YouTube or Twitch URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!currentUser) {
+      toast({
+        title: "Sign In Required",
+        description: "Please sign in to process videos",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_ENDPOINT}/process`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          youtube_url: videoUrl,
+          user_id: currentUser.uid,
+          user_email: currentUser.email || "",
+          project_name: "Untitled Project",
+          startFrom: "download"
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to start processing");
+      }
+
+      const sessionId = data.session_id;
+
+      // Create video document in Firestore
+      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
+      await setDoc(videoDocRef, {
+        sessionId: sessionId,
+        youtubeUrl: videoUrl,
+        projectName: "Untitled Project",
+        status: "processing",
+        createdAt: serverTimestamp(),
+        videoInfo: null,
+        clips: [],
+        error: null
+      });
+
+      // Increment user's totalVideos count
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        totalVideos: increment(1)
+      });
+
+      toast({
+        title: "Processing started!",
+        description: "Your video is being processed. Check the recent projects below.",
+      });
+
+      // Clear the input
+      setVideoUrl("");
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to start video processing",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/x-matroska'];
+    if (!validTypes.includes(file.type)) {
+      toast({
+        title: "Invalid File Type",
+        description: "Please upload a video file (MP4, MOV, AVI, WebM, MKV)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (5GB max)
+    const maxSize = 5 * 1024 * 1024 * 1024; // 5GB in bytes
+    if (file.size > maxSize) {
+      toast({
+        title: "File Too Large",
+        description: "Please upload a video smaller than 5GB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSelectedFile(file);
+    toast({
+      title: "File Selected",
+      description: `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`,
+    });
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      toast({
+        title: "No File Selected",
+        description: "Please select a video file first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!currentUser) {
+      toast({
+        title: "Sign In Required",
+        description: "Please sign in to upload videos",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingFile(true);
+
+    try {
+      // For now, redirect to upload page with file info
+      // You'll need to implement actual file upload to your backend/S3
+      toast({
+        title: "Upload Feature",
+        description: "File upload is not yet implemented. Please use the full upload page.",
+      });
+      navigate("/upload");
+    } catch (err: any) {
+      toast({
+        title: "Upload Failed",
+        description: err.message || "Failed to upload video",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="relative">
+      <Card className="shadow-large border-border/50 overflow-hidden">
+        <CardContent className="p-8 md:p-10">
+          <div className="max-w-3xl mx-auto space-y-6">
+
+            {/* Main Content Box */}
+            <div className="bg-gradient-to-br from-primary/5 via-accent/5 to-background rounded-2xl p-6 md:p-8 border border-border/30 shadow-sm">
+
+              {/* Input Section with integrated button */}
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                      <LinkIcon className="h-5 w-5" />
+                    </div>
+                    <Input
+                      placeholder="Paste your YouTube URL here..."
+                      className="h-14 pl-12 pr-4 text-base bg-background/60 backdrop-blur-sm border-border/60 rounded-lg focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm"
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !loading) {
+                          handleQuickProcess();
+                        }
+                      }}
+                      disabled={loading}
+                    />
+                  </div>
+                  <Button
+                    size="lg"
+                    className="h-14 px-8 gradient-primary text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                    onClick={handleQuickProcess}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Generate Clips
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Or separator */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border/50"></div>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Or</span>
+                  <div className="flex-1 h-px bg-border/50"></div>
+                </div>
+
+                {/* File input (hidden) */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/x-msvideo,video/webm,video/x-matroska"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                {/* Selected file display */}
+                {selectedFile ? (
+                  <div className="flex items-center gap-3 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+                    <FileVideo className="h-8 w-8 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{selectedFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-shrink-0"
+                      onClick={clearSelectedFile}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="gradient-primary flex-shrink-0"
+                      onClick={handleFileUpload}
+                      disabled={uploadingFile}
+                    >
+                      {uploadingFile ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        "Process File"
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  /* Upload button */
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full h-12 gap-2 bg-background/40 hover:bg-background/60 border-border/60"
+                    onClick={handleUploadClick}
+                  >
+                    <Upload className="h-5 w-5" />
+                    Upload from Computer
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Features Grid - Different Layout */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="flex flex-col items-center text-center p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 border border-yellow-500/20 hover:border-yellow-500/40 transition-all group">
+                <div className="mb-3 p-3 rounded-full bg-yellow-500/10 group-hover:bg-yellow-500/20 transition-colors">
+                  <Sparkles className="h-6 w-6 text-yellow-600 dark:text-yellow-500" />
+                </div>
+                <h3 className="font-semibold text-sm mb-1">Viral Clips</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">AI finds engaging moments</p>
+              </div>
+
+              <div className="flex flex-col items-center text-center p-4 rounded-xl bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20 hover:border-green-500/40 transition-all group">
+                <div className="mb-3 p-3 rounded-full bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                  <Type className="h-6 w-6 text-green-600 dark:text-green-500" />
+                </div>
+                <h3 className="font-semibold text-sm mb-1">Auto Captions</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">Smart subtitle generation</p>
+              </div>
+
+              <div className="flex flex-col items-center text-center p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 hover:border-blue-500/40 transition-all group">
+                <div className="mb-3 p-3 rounded-full bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                  <Crop className="h-6 w-6 text-blue-600 dark:text-blue-500" />
+                </div>
+                <h3 className="font-semibold text-sm mb-1">Smart Reframe</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">Perfect crop every time</p>
+              </div>
+            </div>
+
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -10,8 +10,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Upload as UploadIcon, Link as LinkIcon, FileVideo, AlertCircle, Loader2 } from "lucide-react";
+import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
-// Replace this with your actual API Gateway endpoint URL
 const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
 
 export default function Upload() {
@@ -46,28 +47,64 @@ export default function Upload() {
     setLoading(true);
 
     try {
+      console.log("API Endpoint:", API_ENDPOINT);
+      console.log("Full URL:", `${API_ENDPOINT}/process`);
+      console.log("Request body:", {
+        youtube_url: videoUrl,
+        user_id: currentUser.uid,
+        user_email: currentUser.email || "",
+        project_name: projectName || "Untitled Project",
+        startFrom: "download"
+      });
+
       const response = await fetch(`${API_ENDPOINT}/process`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.dumps({
+        body: JSON.stringify({
           youtube_url: videoUrl,
           user_id: currentUser.uid,
           user_email: currentUser.email || "",
-          project_name: projectName || "Untitled Project"
+          project_name: projectName || "Untitled Project",
+          startFrom: "download"
         }),
       });
 
+      console.log("Response status:", response.status);
+      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to start processing");
       }
 
+      const sessionId = data.session_id;
+
+      // Create video document in Firestore
+      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
+      await setDoc(videoDocRef, {
+        sessionId: sessionId,
+        youtubeUrl: videoUrl,
+        projectName: projectName || "Untitled Project",
+        status: "processing",
+        createdAt: serverTimestamp(),
+        videoInfo: null,
+        clips: [],
+        error: null
+      });
+
+      // Increment user's totalVideos count
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        totalVideos: increment(1)
+      });
+
       toast({
         title: "Processing started!",
-        description: `Your video is being processed. Session ID: ${data.session_id.substring(0, 8)}...`,
+        description: `Your video is being processed. Session ID: ${sessionId.substring(0, 8)}...`,
       });
 
       // Navigate to dashboard to see processing status

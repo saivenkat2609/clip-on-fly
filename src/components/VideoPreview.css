@@ -1,0 +1,61 @@
+/* Custom Video.js theme to match app design */
+
+/* Override Video.js default styles */
+.video-js {
+  font-family: inherit;
+  border-radius: 0.5rem;
+}
+
+/* Hide big play button (video autoplays) */
+.video-js .vjs-big-play-button {
+  display: none !important;
+}
+
+/* Control bar */
+.video-js .vjs-control-bar {
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+/* Progress bar */
+.video-js .vjs-play-progress,
+.video-js .vjs-volume-level {
+  background-color: rgb(79, 70, 229);
+}
+
+/* Hover state for progress bar */
+.video-js .vjs-slider:hover .vjs-play-progress,
+.video-js .vjs-slider:hover .vjs-volume-level {
+  background-color: rgb(99, 102, 241);
+}
+
+/* Loading spinner */
+.video-js .vjs-loading-spinner {
+  border-color: rgba(79, 70, 229, 0.8);
+}
+
+/* Buttons hover state */
+.video-js .vjs-control:hover {
+  color: rgb(99, 102, 241);
+}
+
+/* Time display */
+.video-js .vjs-time-control {
+  font-size: 1em;
+  line-height: 3em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .video-js .vjs-big-play-button {
+    font-size: 2.5em;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .video-js {
+    background-color: #000;
+  }
+}

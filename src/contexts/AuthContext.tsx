@@ -16,7 +16,8 @@ import {
   EmailAuthProvider,
   reauthenticateWithPopup,
 } from 'firebase/auth';
-import { auth, googleProvider } from '@/lib/firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, googleProvider, db } from '@/lib/firebase';
 import { validateEmailStrictGmailOnly } from '@/lib/emailValidator';
 import { useToast } from '@/hooks/use-toast';
 
@@ -93,6 +94,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Send email verification
         await sendEmailVerification(userCredential.user);
+
+        // Create user profile in Firestore
+        // Set credits expiry to first of next month
+        const now = new Date();
+        const creditsExpiryDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          uid: userCredential.user.uid,
+          email: email,
+          displayName: displayName,
+          photoURL: null,
+          createdAt: serverTimestamp(),
+          lastLogin: serverTimestamp(),
+          emailVerified: false,
+          provider: 'password',
+          totalVideos: 0,
+          totalClips: 0,
+          storageUsed: 0,
+          company: '',
+          plan: 'Free',
+          totalCredits: 60, // Total credits per month for Free plan
+          creditsExpiryDate: creditsExpiryDate,
+          theme: 'indigo',
+          mode: 'light',
+          notifications: {
+            processing: true,
+            weekly: true,
+            marketing: false
+          }
+        });
+
         toast({
           title: 'Verification email sent',
           description: 'Please check your email to verify your account.',
@@ -171,6 +203,48 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       // Google OAuth emails are already verified, no additional checks needed
+
+      // Create or update user profile in Firestore
+      const userDocRef = doc(db, 'users', result.user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        // Create new user profile for first-time Google sign-in
+        // Set credits expiry to first of next month
+        const now = new Date();
+        const creditsExpiryDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+        await setDoc(userDocRef, {
+          uid: result.user.uid,
+          email: result.user.email,
+          displayName: result.user.displayName || result.user.email?.split('@')[0],
+          photoURL: result.user.photoURL,
+          createdAt: serverTimestamp(),
+          lastLogin: serverTimestamp(),
+          emailVerified: true,
+          provider: 'google',
+          totalVideos: 0,
+          totalClips: 0,
+          storageUsed: 0,
+          company: '',
+          plan: 'Free',
+          totalCredits: 60, // Total credits per month for Free plan
+          creditsExpiryDate: creditsExpiryDate,
+          theme: 'indigo',
+          mode: 'light',
+          notifications: {
+            processing: true,
+            weekly: true,
+            marketing: false
+          }
+        });
+      } else {
+        // Update last login for existing user
+        await setDoc(userDocRef, {
+          lastLogin: serverTimestamp()
+        }, { merge: true });
+      }
+
       toast({
         title: 'Welcome!',
         description: `Signed in as ${result.user.displayName || email}`,

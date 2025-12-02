@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+
+        match /videos/{videoId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          allow create: if request.auth != null && request.auth.uid == userId;
+          allow update: if true;  // ← This allows Lambda to update!
+          allow delete: if request.auth != null && request.auth.uid == userId;
+        }
+      }
+
+    // Social media connections
+    // Note: Admin SDK (used by Cloud Functions) bypasses these rules
+    match /user_social_connections/{connectionId} {
+      // Allow users to read their own connections
+      allow read: if request.auth != null &&
+                    (resource == null || request.auth.uid == resource.data.userId);
+      // Allow users to write their own connections
+      allow write: if request.auth != null;
+    }
+
+    // Deny all other reads and writes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

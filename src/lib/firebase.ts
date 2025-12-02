@@ -1,5 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,8 +15,16 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);
+export const functions = getFunctions(app);
 
 // Configure Google provider to always show account selection
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
+
+// Cloud Function URLs
+export const YOUTUBE_OAUTH_CALLBACK_URL = `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net/youtubeOAuthCallback`;
+
+// Frontend URL based on current location
+export const FRONTEND_URL = window.location.origin;

@@ -1,15 +1,16 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Footer } from "@/components/layout/Footer";
 import { Link } from "react-router-dom";
-import { 
-  Upload, 
-  Wand2, 
-  Download, 
-  Sparkles, 
-  Video, 
-  Scissors, 
-  Type, 
+import {
+  Upload,
+  Wand2,
+  Download,
+  Sparkles,
+  Video,
+  Scissors,
+  Type,
   Palette,
   Clock,
   Star,
@@ -361,52 +362,7 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-12 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                  <Sparkles className="h-5 w-5 text-primary-foreground" />
-                </div>
-                <span className="text-lg font-bold">ClipForge</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                AI-powered video repurposing for modern creators
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Product</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-smooth">Features</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">Pricing</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">Templates</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">API</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-smooth">About</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">Blog</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">Careers</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">Contact</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-smooth">Privacy</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">Terms</a></li>
-                <li><a href="#" className="hover:text-foreground transition-smooth">Security</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-border pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; 2024 ClipForge. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

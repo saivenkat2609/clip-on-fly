@@ -6,18 +6,30 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Bell, Key, Users, Palette, Mail, Lock, Shield, CheckCircle2, AlertCircle } from "lucide-react";
+import { User, Bell, Key, Users, Palette, Mail, Lock, Shield, CheckCircle2, AlertCircle, Share2, Check } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { YouTubeConnection } from "@/components/YouTubeConnection";
+import { cn } from "@/lib/utils";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { updateProfile } from "firebase/auth";
+import { db } from "@/lib/firebase";
 
 export default function Settings() {
   const { theme, mode, setTheme, setMode } = useTheme();
-  const { currentUser, changeEmail, changePassword, resendVerificationEmail } = useAuth();
+  const { currentUser, changeEmail, changePassword, resendVerificationEmail, refreshUser } = useAuth();
+
+  // Profile information state
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [company, setCompany] = useState('');
+  const [initialProfileData, setInitialProfileData] = useState({ firstName: '', lastName: '', company: '' });
+  const [profileLoading, setProfileLoading] = useState(false);
 
   // Email change state
   const [newEmail, setNewEmail] = useState('');
@@ -32,6 +44,45 @@ export default function Settings() {
 
   // Email verification state
   const [verificationLoading, setVerificationLoading] = useState(false);
+
+  // Load user profile data from Firestore
+  useEffect(() => {
+    async function loadProfile() {
+      if (currentUser) {
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
+
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            const displayName = currentUser.displayName || '';
+            const names = displayName.split(' ');
+            const fName = names[0] || '';
+            const lName = names.length > 1 ? names[names.length - 1] : '';
+            const comp = userData.company || '';
+
+            setFirstName(fName);
+            setLastName(lName);
+            setCompany(comp);
+            setInitialProfileData({ firstName: fName, lastName: lName, company: comp });
+          }
+        } catch (error) {
+          console.error('Failed to load profile:', error);
+        }
+      }
+    }
+
+    loadProfile();
+  }, [currentUser]);
+
+  // Check if profile data has changed
+  const hasProfileChanged = () => {
+    return (
+      firstName !== initialProfileData.firstName ||
+      lastName !== initialProfileData.lastName ||
+      company !== initialProfileData.company
+    );
+  };
 
   const getUserInitials = () => {
     if (!currentUser) return "??";
@@ -57,6 +108,72 @@ export default function Settings() {
     if (!currentUser?.displayName) return "";
     const names = currentUser.displayName.split(" ");
     return names.length > 1 ? names[names.length - 1] : "";
+  };
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!currentUser) {
+      toast.error('No user is currently signed in');
+      return;
+    }
+
+    if (!firstName.trim()) {
+      toast.error('First name is required');
+      return;
+    }
+
+    setProfileLoading(true);
+    try {
+      // Construct full display name
+      const displayName = lastName.trim()
+        ? `${firstName.trim()} ${lastName.trim()}`
+        : firstName.trim();
+
+      // Update Firestore profile
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(userDocRef, {
+        displayName: displayName,
+        company: company.trim()
+      });
+
+      // Update Firebase Auth profile (displayName)
+      await updateProfile(currentUser, {
+        displayName: displayName
+      });
+
+      // Normalize values
+      const normalizedFirstName = firstName.trim();
+      const normalizedLastName = lastName.trim();
+      const normalizedCompany = company.trim();
+
+      // Update local state to reflect saved changes
+      setFirstName(normalizedFirstName);
+      setLastName(normalizedLastName);
+      setCompany(normalizedCompany);
+
+      // Update initial data to disable save/cancel buttons
+      setInitialProfileData({
+        firstName: normalizedFirstName,
+        lastName: normalizedLastName,
+        company: normalizedCompany
+      });
+
+      toast.success('Profile updated successfully!');
+    } catch (error: any) {
+      console.error('Failed to update profile:', error);
+      toast.error(error.message || 'Failed to update profile');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleProfileCancel = () => {
+    // Reset form to initial values
+    setFirstName(initialProfileData.firstName);
+    setLastName(initialProfileData.lastName);
+    setCompany(initialProfileData.company);
+    toast.info('Changes discarded');
   };
 
   const handleEmailChange = async (e: React.FormEvent) => {
@@ -125,12 +242,48 @@ export default function Settings() {
   const isGoogleUser = currentUser?.providerData.some(provider => provider.providerId === 'google.com');
 
   const themes = [
-    { id: "indigo", name: "Indigo", colors: ["hsl(250 80% 60%)", "hsl(280 70% 65%)", "hsl(35 100% 60%)"] },
-    { id: "ocean", name: "Ocean", colors: ["hsl(200 90% 50%)", "hsl(220 80% 55%)", "hsl(180 100% 45%)"] },
-    { id: "sunset", name: "Sunset", colors: ["hsl(15 95% 60%)", "hsl(340 100% 60%)", "hsl(30 100% 60%)"] },
-    { id: "forest", name: "Forest", colors: ["hsl(150 70% 45%)", "hsl(130 65% 50%)", "hsl(80 100% 50%)"] },
-    { id: "cyber", name: "Cyber", colors: ["hsl(280 100% 60%)", "hsl(300 90% 65%)", "hsl(170 100% 50%)"] },
-    { id: "rose", name: "Rose", colors: ["hsl(330 80% 60%)", "hsl(310 75% 65%)", "hsl(20 100% 65%)"] },
+    {
+      id: "indigo",
+      name: "Indigo",
+      colors: ["hsl(250 80% 60%)", "hsl(280 70% 65%)", "hsl(35 100% 60%)"],
+      hoverBg: "hsl(250 80% 60% / 0.1)",
+      hoverBorder: "hsl(250 80% 60% / 0.3)"
+    },
+    {
+      id: "ocean",
+      name: "Ocean",
+      colors: ["hsl(200 90% 50%)", "hsl(220 80% 55%)", "hsl(180 100% 45%)"],
+      hoverBg: "hsl(200 90% 50% / 0.1)",
+      hoverBorder: "hsl(200 90% 50% / 0.3)"
+    },
+    {
+      id: "sunset",
+      name: "Sunset",
+      colors: ["hsl(15 95% 60%)", "hsl(340 100% 60%)", "hsl(30 100% 60%)"],
+      hoverBg: "hsl(15 95% 60% / 0.1)",
+      hoverBorder: "hsl(15 95% 60% / 0.3)"
+    },
+    {
+      id: "forest",
+      name: "Forest",
+      colors: ["hsl(150 70% 45%)", "hsl(130 65% 50%)", "hsl(80 100% 50%)"],
+      hoverBg: "hsl(150 70% 45% / 0.1)",
+      hoverBorder: "hsl(150 70% 45% / 0.3)"
+    },
+    {
+      id: "cyber",
+      name: "Cyber",
+      colors: ["hsl(280 100% 60%)", "hsl(300 90% 65%)", "hsl(170 100% 50%)"],
+      hoverBg: "hsl(280 100% 60% / 0.1)",
+      hoverBorder: "hsl(280 100% 60% / 0.3)"
+    },
+    {
+      id: "rose",
+      name: "Rose",
+      colors: ["hsl(330 80% 60%)", "hsl(310 75% 65%)", "hsl(20 100% 65%)"],
+      hoverBg: "hsl(330 80% 60% / 0.1)",
+      hoverBorder: "hsl(330 80% 60% / 0.3)"
+    },
   ];
 
   return (
@@ -143,7 +296,7 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-8">
+          <TabsList className="grid w-full grid-cols-6 mb-8">
             <TabsTrigger value="profile">
               <User className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Profile</span>
@@ -151,6 +304,10 @@ export default function Settings() {
             <TabsTrigger value="appearance">
               <Palette className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Theme</span>
+            </TabsTrigger>
+            <TabsTrigger value="social">
+              <Share2 className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Social</span>
             </TabsTrigger>
             <TabsTrigger value="notifications">
               <Bell className="h-4 w-4 mr-2" />
@@ -166,6 +323,11 @@ export default function Settings() {
             </TabsTrigger>
           </TabsList>
 
+          {/* Social Media Settings */}
+          <TabsContent value="social">
+            <YouTubeConnection />
+          </TabsContent>
+
           {/* Appearance Settings */}
           <TabsContent value="appearance">
             <Card className="shadow-medium">
@@ -176,46 +338,70 @@ export default function Settings() {
                 {/* Theme Mode */}
                 <div>
                   <Label className="text-base font-semibold mb-4 block">Mode</Label>
-                  <RadioGroup 
-                    value={mode} 
+                  <RadioGroup
+                    value={mode}
                     onValueChange={(value) => {
                       setMode(value as "light" | "dark");
                       toast.success("Mode updated");
                     }}
                     className="grid grid-cols-2 gap-4"
                   >
-                    <Label
-                      htmlFor="light"
-                      className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-card p-4 hover:bg-accent hover:border-accent cursor-pointer transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                    >
-                      <RadioGroupItem value="light" id="light" className="sr-only" />
-                      <div className="space-y-2 w-full">
-                        <div className="flex items-center justify-center p-6 rounded-md bg-background border border-border">
-                          <div className="text-foreground font-semibold">Aa</div>
+                    <div className="relative group">
+                      <Label
+                        htmlFor="light"
+                        className={cn(
+                          "flex flex-col items-center justify-between rounded-lg border-2 bg-card p-4 cursor-pointer transition-all relative",
+                          mode === "light"
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border group-hover:border-slate-300 group-hover:bg-slate-50 dark:group-hover:border-slate-600 dark:group-hover:bg-slate-800/50"
+                        )}
+                      >
+                        <RadioGroupItem value="light" id="light" className="sr-only" />
+                        {mode === "light" && (
+                          <div className="absolute top-3 right-3 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                            <Check className="h-3 w-3 text-primary-foreground" />
+                          </div>
+                        )}
+                        <div className="space-y-2 w-full">
+                          <div className="flex items-center justify-center p-6 rounded-md bg-white border border-slate-200 shadow-sm">
+                            <div className="text-slate-900 font-semibold text-lg">Aa</div>
+                          </div>
+                          <div className="text-center font-medium">Light</div>
                         </div>
-                        <div className="text-center font-medium">Light</div>
-                      </div>
-                    </Label>
-                    <Label
-                      htmlFor="dark"
-                      className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-card p-4 hover:bg-accent hover:border-accent cursor-pointer transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                    >
-                      <RadioGroupItem value="dark" id="dark" className="sr-only" />
-                      <div className="space-y-2 w-full">
-                        <div className="flex items-center justify-center p-6 rounded-md bg-slate-900 border border-slate-700">
-                          <div className="text-slate-50 font-semibold">Aa</div>
+                      </Label>
+                    </div>
+                    <div className="relative group">
+                      <Label
+                        htmlFor="dark"
+                        className={cn(
+                          "flex flex-col items-center justify-between rounded-lg border-2 bg-card p-4 cursor-pointer transition-all relative",
+                          mode === "dark"
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border group-hover:border-slate-600 group-hover:bg-slate-800/30 dark:group-hover:border-slate-500 dark:group-hover:bg-slate-700/50"
+                        )}
+                      >
+                        <RadioGroupItem value="dark" id="dark" className="sr-only" />
+                        {mode === "dark" && (
+                          <div className="absolute top-3 right-3 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                            <Check className="h-3 w-3 text-primary-foreground" />
+                          </div>
+                        )}
+                        <div className="space-y-2 w-full">
+                          <div className="flex items-center justify-center p-6 rounded-md bg-slate-900 border border-slate-700 shadow-sm">
+                            <div className="text-slate-50 font-semibold text-lg">Aa</div>
+                          </div>
+                          <div className="text-center font-medium">Dark</div>
                         </div>
-                        <div className="text-center font-medium">Dark</div>
-                      </div>
-                    </Label>
+                      </Label>
+                    </div>
                   </RadioGroup>
                 </div>
 
                 {/* Color Theme */}
                 <div>
                   <Label className="text-base font-semibold mb-4 block">Color Theme</Label>
-                  <RadioGroup 
-                    value={theme} 
+                  <RadioGroup
+                    value={theme}
                     onValueChange={(value) => {
                       setTheme(value as any);
                       toast.success(`${value.charAt(0).toUpperCase() + value.slice(1)} theme applied`);
@@ -223,25 +409,57 @@ export default function Settings() {
                     className="grid grid-cols-2 md:grid-cols-3 gap-4"
                   >
                     {themes.map((t) => (
-                      <Label
-                        key={t.id}
-                        htmlFor={t.id}
-                        className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-card p-4 hover:bg-accent hover:border-accent cursor-pointer transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                      >
-                        <RadioGroupItem value={t.id} id={t.id} className="sr-only" />
-                        <div className="space-y-3 w-full">
-                          <div className="flex gap-1.5 justify-center">
-                            {t.colors.map((color, i) => (
-                              <div
-                                key={i}
-                                className="h-8 w-8 rounded-full shadow-soft"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
+                      <div key={t.id} className="relative group">
+                        <Label
+                          htmlFor={t.id}
+                          className={cn(
+                            "flex flex-col items-center justify-between rounded-lg border-2 bg-card p-4 cursor-pointer transition-all relative",
+                            theme === t.id
+                              ? "border-primary bg-primary/5 shadow-sm"
+                              : "border-border"
+                          )}
+                          style={
+                            theme !== t.id
+                              ? {
+                                  // @ts-ignore
+                                  "--hover-bg": t.hoverBg,
+                                  "--hover-border": t.hoverBorder,
+                                } as React.CSSProperties
+                              : undefined
+                          }
+                          onMouseEnter={(e) => {
+                            if (theme !== t.id) {
+                              e.currentTarget.style.backgroundColor = t.hoverBg;
+                              e.currentTarget.style.borderColor = t.hoverBorder;
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (theme !== t.id) {
+                              e.currentTarget.style.backgroundColor = "";
+                              e.currentTarget.style.borderColor = "";
+                            }
+                          }}
+                        >
+                          <RadioGroupItem value={t.id} id={t.id} className="sr-only" />
+                          {theme === t.id && (
+                            <div className="absolute top-3 right-3 h-5 w-5 rounded-full bg-primary flex items-center justify-center z-10">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                          )}
+                          <div className="space-y-3 w-full">
+                            <div className="flex gap-1.5 justify-center">
+                              {t.colors.map((color, i) => (
+                                <div
+                                  key={i}
+                                  className="h-8 w-8 rounded-full shadow-soft ring-1 ring-black/5"
+                                  style={{ backgroundColor: color }}
+                                />
+                              ))}
+                            </div>
+                            <div className="text-center font-medium">{t.name}</div>
                           </div>
-                          <div className="text-center font-medium">{t.name}</div>
-                        </div>
-                      </Label>
+                        </Label>
+                      </div>
                     ))}
                   </RadioGroup>
                 </div>
@@ -289,45 +507,80 @@ export default function Settings() {
                   Account Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center gap-6">
-                  <Avatar className="h-20 w-20">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                      {getUserInitials()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-semibold text-lg">{currentUser?.displayName || 'User'}</p>
-                    <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
-                    {currentUser?.emailVerified && (
-                      <div className="flex items-center gap-1 mt-1 text-green-600">
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span className="text-xs">Verified</span>
-                      </div>
-                    )}
+              <CardContent>
+                <form onSubmit={handleProfileUpdate} className="space-y-6">
+                  <div className="flex items-center gap-6">
+                    <Avatar className="h-20 w-20">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+                        {getUserInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-lg">{currentUser?.displayName || 'User'}</p>
+                      <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
+                      {currentUser?.emailVerified && (
+                        <div className="flex items-center gap-1 mt-1 text-green-600">
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span className="text-xs">Verified</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue={getFirstName()} className="mt-2" />
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        disabled={profileLoading}
+                        className="mt-2"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        disabled={profileLoading}
+                        className="mt-2"
+                      />
+                    </div>
                   </div>
+
                   <div>
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" defaultValue={getLastName()} className="mt-2" />
+                    <Label htmlFor="company">Company</Label>
+                    <Input
+                      id="company"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      placeholder="Your company name"
+                      disabled={profileLoading}
+                      className="mt-2"
+                    />
                   </div>
-                </div>
 
-                <div>
-                  <Label htmlFor="company">Company</Label>
-                  <Input id="company" placeholder="Your company name" className="mt-2" />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                  <Button variant="outline">Cancel</Button>
-                  <Button className="gradient-primary">Save Changes</Button>
-                </div>
+                  <div className="flex justify-end gap-3 pt-4 border-t border-border">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleProfileCancel}
+                      disabled={profileLoading || !hasProfileChanged()}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="gradient-primary"
+                      disabled={profileLoading || !hasProfileChanged()}
+                    >
+                      {profileLoading ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </div>
+                </form>
               </CardContent>
             </Card>
 
