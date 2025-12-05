@@ -1,6 +1,3 @@
-// Updated UploadHero component that uses Cloudflare Worker
-// This version bypasses R2 CORS issues by uploading through a Worker proxy
-
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,16 +10,7 @@ import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/fir
 import { db } from "@/lib/firebase";
 
 const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
-const WORKER_UPLOAD_URL = import.meta.env.VITE_WORKER_UPLOAD_URL; // New: Cloudflare Worker URL
 
-// Generate UUID (simplified version)
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
 
 export function UploadHero() {
   const [videoUrl, setVideoUrl] = useState("");
@@ -140,7 +128,7 @@ export function UploadHero() {
     }
 
     // Validate file size (5GB max)
-    const maxSize = 5 * 1024 * 1024 * 1024;
+    const maxSize = 5 * 1024 * 1024 * 1024; // 5GB in bytes
     if (file.size > maxSize) {
       toast({
         title: "File Too Large",
@@ -176,72 +164,113 @@ export function UploadHero() {
       return;
     }
 
-    if (!WORKER_UPLOAD_URL) {
-      toast({
-        title: "Configuration Error",
-        description: "Worker upload URL not configured. Please add VITE_WORKER_UPLOAD_URL to .env",
-        variant: "destructive",
-      });
-      console.error("[Upload] VITE_WORKER_UPLOAD_URL not set in environment variables");
-      return;
-    }
-
     setUploadingFile(true);
 
     try {
-      // Generate session ID on frontend
-      const session_id = generateUUID();
-
-      console.log(`[Upload] Starting upload via Cloudflare Worker...`);
-      console.log(`[Upload] Session ID: ${session_id}`);
-      console.log(`[Upload] Worker URL: ${WORKER_UPLOAD_URL}`);
+      console.log(`[Upload] Starting upload...`);
+      console.log(`[Upload] API Endpoint: ${API_ENDPOINT}`);
+      console.log(`[Upload] Full URL: ${API_ENDPOINT}/upload/generate-url`);
       console.log(`[Upload] File details:`, {
         name: selectedFile.name,
         size: selectedFile.size,
         type: selectedFile.type,
       });
 
-      // Step 1: Upload directly to Cloudflare Worker
+      // Step 2: Get pre-signed upload URL from Lambda
+      const uploadUrlResponse = await fetch(`${API_ENDPOINT}/upload/generate-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: currentUser.uid,
+          user_email: currentUser.email || "",
+          fileName: selectedFile.name,
+          fileSize: selectedFile.size,
+          contentType: selectedFile.type,
+          videoTitle: selectedFile.name.replace(/\.[^/.]+$/, ""),
+          videoDescription: "Uploaded from dashboard"
+        }),
+      }).catch(err => {
+        console.error("[Upload] Fetch error:", err);
+        throw new Error(`Network error: ${err.message}. Please check if the API endpoint is accessible.`);
+      });
+
+      console.log(`[Upload] Response status: ${uploadUrlResponse.status}`);
+
+      if (!uploadUrlResponse.ok) {
+        let errorData;
+        try {
+          errorData = await uploadUrlResponse.json();
+        } catch (e) {
+          const text = await uploadUrlResponse.text();
+          console.error("[Upload] Error response:", text);
+          throw new Error(`API returned ${uploadUrlResponse.status}: ${text}`);
+        }
+        throw new Error(errorData.error || errorData.message || "Failed to generate upload URL");
+      }
+
+      const { session_id, uploadUrl, s3_key } = await uploadUrlResponse.json();
+      console.log(`[Upload] Got pre-signed URL`);
+      console.log(`[Upload] Session ID: ${session_id}`);
+      console.log(`[Upload] S3 Key: ${s3_key}`);
+      console.log(`[Upload] Upload URL domain: ${new URL(uploadUrl).hostname}`);
+      console.log(`[Upload] Current origin: ${window.location.origin}`);
+
       toast({
         title: "Uploading...",
         description: `Uploading ${selectedFile.name} to storage`,
       });
 
-      const uploadResponse = await fetch(`${WORKER_UPLOAD_URL}/upload/${session_id}`, {
+      // Step 3: Upload file directly to R2/S3 using pre-signed URL
+      console.log(`[Upload] Starting PUT request to storage...`);
+
+      // Note: We don't set Content-Length header - the browser sets it automatically
+      // Setting it manually can cause CORS issues with pre-signed URLs
+      const uploadResponse = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
           "Content-Type": selectedFile.type,
-          "X-Session-Id": session_id,
-          "X-User-Id": currentUser.uid,
         },
         body: selectedFile,
       }).catch(err => {
-        console.error("[Upload] Worker fetch error:", err);
-        throw new Error(`Failed to connect to upload service: ${err.message}`);
+        console.error("[Upload] Storage upload fetch error:", err);
+        console.error("[Upload] Error type:", err.name);
+        console.error("[Upload] Error message:", err.message);
+
+        // Check if it's a CORS error
+        if (err.message.includes("CORS") || err.message.includes("Failed to fetch")) {
+          throw new Error(
+            "CORS error: The storage bucket is not configured to allow uploads from this origin. " +
+            "Please configure CORS on your Cloudflare R2 bucket to allow requests from " +
+            window.location.origin
+          );
+        }
+
+        throw new Error(`Storage upload failed: ${err.message}`);
       });
 
-      console.log(`[Upload] Worker response status: ${uploadResponse.status}`);
+      console.log(`[Upload] Storage response status: ${uploadResponse.status}`);
+      console.log(`[Upload] Storage response headers:`, Object.fromEntries([...uploadResponse.headers.entries()]));
 
       if (!uploadResponse.ok) {
-        let errorData;
-        try {
-          errorData = await uploadResponse.json();
-        } catch (e) {
-          const text = await uploadResponse.text();
-          console.error("[Upload] Worker error response:", text);
-          throw new Error(`Upload failed (${uploadResponse.status}): ${text}`);
+        const responseText = await uploadResponse.text();
+        console.error(`[Upload] Storage error response:`, responseText);
+
+        if (uploadResponse.status === 403) {
+          throw new Error(
+            "Upload forbidden (403): This is likely a CORS issue. " +
+            "Please ensure your Cloudflare R2 bucket has CORS configured to allow " +
+            "PUT requests from " + window.location.origin
+          );
         }
-        throw new Error(errorData.error || `Upload failed (${uploadResponse.status})`);
+
+        throw new Error(`Upload to storage failed (${uploadResponse.status}): ${responseText || uploadResponse.statusText}`);
       }
 
-      const uploadData = await uploadResponse.json();
-      console.log(`[Upload] File uploaded successfully to Worker:`, uploadData);
+      console.log(`[Upload] File uploaded to storage successfully`);
 
-      const s3_key = uploadData.s3_key || `${session_id}/uploaded_video.mp4`;
-
-      // Step 2: Start processing via API Gateway
-      console.log(`[Upload] Starting processing...`);
-
+      // Step 4: Start state machine processing
       const processResponse = await fetch(`${API_ENDPOINT}/upload/start`, {
         method: "POST",
         headers: {
@@ -252,8 +281,7 @@ export function UploadHero() {
           user_id: currentUser.uid,
           user_email: currentUser.email || "",
           videoTitle: selectedFile.name.replace(/\.[^/.]+$/, ""),
-          videoDescription: "Uploaded from dashboard",
-          s3_key: s3_key,
+          videoDescription: "Uploaded from dashboard"
         }),
       });
 
@@ -265,11 +293,11 @@ export function UploadHero() {
       const processData = await processResponse.json();
       console.log(`[Upload] Processing started:`, processData);
 
-      // Step 3: Create video document in Firestore
+      // Step 5: Create video document in Firestore
       const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, session_id);
       await setDoc(videoDocRef, {
         sessionId: session_id,
-        youtubeUrl: "",
+        youtubeUrl: "", // Not from YouTube
         projectName: selectedFile.name.replace(/\.[^/.]+$/, ""),
         status: "processing",
         createdAt: serverTimestamp(),

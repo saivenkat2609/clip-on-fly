@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>R2 CORS Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>R2 CORS Direct Test</h1>
+    <p>This will test if your R2 bucket is properly configured for CORS.</p>
+
+    <button onclick="testCORS()">Test R2 CORS</button>
+    <button onclick="clearLog()">Clear Log</button>
+
+    <h3>Test Results:</h3>
+    <div id="log" class="log"></div>
+
+    <script>
+        const R2_BASE = "https://f1ff3bcad7fd44abcea85af75a286b01.r2.cloudflarestorage.com/opus-clip-videos";
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        async function testCORS() {
+            clearLog();
+            log('Starting R2 CORS tests...', 'info');
+            log('Origin: ' + window.location.origin, 'info');
+            log('R2 Bucket: ' + R2_BASE, 'info');
+            log('', 'info');
+
+            // Test 1: Simple GET request
+            log('Test 1: Simple GET request to R2', 'info');
+            try {
+                const response = await fetch(R2_BASE + '/test.txt', {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                log('✅ GET request succeeded!', 'success');
+                log('Response status: ' + response.status, 'success');
+                log('Response headers:', 'info');
+                response.headers.forEach((value, key) => {
+                    log(`  ${key}: ${value}`, 'info');
+                });
+            } catch (error) {
+                log('❌ GET request failed: ' + error.message, 'error');
+                log('This indicates CORS is not configured correctly', 'error');
+            }
+
+            log('', 'info');
+
+            // Test 2: OPTIONS preflight
+            log('Test 2: OPTIONS preflight request', 'info');
+            try {
+                const response = await fetch(R2_BASE + '/test.txt', {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Access-Control-Request-Method': 'PUT',
+                        'Access-Control-Request-Headers': 'content-type'
+                    },
+                    mode: 'cors'
+                });
+                log('✅ OPTIONS request succeeded!', 'success');
+                log('Response status: ' + response.status, 'success');
+                log('Response headers:', 'info');
+                response.headers.forEach((value, key) => {
+                    log(`  ${key}: ${value}`, 'info');
+                });
+            } catch (error) {
+                log('❌ OPTIONS request failed: ' + error.message, 'error');
+                log('This means CORS preflight is failing', 'error');
+            }
+
+            log('', 'info');
+
+            // Test 3: Small PUT request (will fail without auth, but we can see CORS)
+            log('Test 3: PUT request (will fail without auth, but shows CORS behavior)', 'info');
+            try {
+                const blob = new Blob(['test data'], { type: 'text/plain' });
+                const response = await fetch(R2_BASE + '/test.txt', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'text/plain'
+                    },
+                    body: blob,
+                    mode: 'cors'
+                });
+                log('Response status: ' + response.status, 'info');
+                if (response.status === 403) {
+                    log('⚠️  Got 403 (expected without auth)', 'info');
+                    log('But if we got here, CORS preflight passed!', 'success');
+                }
+            } catch (error) {
+                if (error.message.includes('CORS')) {
+                    log('❌ PUT request blocked by CORS: ' + error.message, 'error');
+                    log('CORS is NOT configured correctly', 'error');
+                } else {
+                    log('⚠️  PUT failed (expected): ' + error.message, 'info');
+                }
+            }
+
+            log('', 'info');
+            log('='.repeat(50), 'info');
+            log('Test Complete!', 'info');
+            log('', 'info');
+            log('If you see CORS errors above, the R2 bucket CORS is not working.', 'info');
+            log('If no CORS errors, the issue is with the pre-signed URL signature.', 'info');
+        }
+    </script>
+</body>
+</html>
