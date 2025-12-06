@@ -11,9 +11,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { apiClient } from "@/lib/apiClient";
 
-const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
-const WORKER_UPLOAD_URL = import.meta.env.VITE_WORKER_UPLOAD_URL; // New: Cloudflare Worker URL
+const WORKER_UPLOAD_URL = import.meta.env.VITE_WORKER_UPLOAD_URL; // Cloudflare Worker URL
 
 // Generate UUID (simplified version)
 function generateUUID() {
@@ -65,25 +65,13 @@ export function UploadHero() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_ENDPOINT}/process`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          youtube_url: videoUrl,
-          user_id: currentUser.uid,
-          user_email: currentUser.email || "",
-          project_name: "Untitled Project",
-          startFrom: "download"
-        }),
+      // SECURE: Use API client with automatic JWT token injection
+      // user_id and user_email are extracted from the verified JWT token on the backend
+      const data = await apiClient.post('/process', {
+        youtube_url: videoUrl,
+        project_name: "Untitled Project",
+        startFrom: "download"
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to start processing");
-      }
 
       const sessionId = data.session_id;
 
@@ -242,27 +230,15 @@ export function UploadHero() {
       // Step 2: Start processing via API Gateway
       console.log(`[Upload] Starting processing...`);
 
-      const processResponse = await fetch(`${API_ENDPOINT}/upload/start`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          session_id: session_id,
-          user_id: currentUser.uid,
-          user_email: currentUser.email || "",
-          videoTitle: selectedFile.name.replace(/\.[^/.]+$/, ""),
-          videoDescription: "Uploaded from dashboard",
-          s3_key: s3_key,
-        }),
+      // SECURE: Use API client with automatic JWT token injection
+      // user_id and user_email are extracted from the verified JWT token on the backend
+      const processData = await apiClient.post('/upload/start', {
+        session_id: session_id,
+        videoTitle: selectedFile.name.replace(/\.[^/.]+$/, ""),
+        videoDescription: "Uploaded from dashboard",
+        s3_key: s3_key,
       });
 
-      if (!processResponse.ok) {
-        const errorData = await processResponse.json();
-        throw new Error(errorData.error || errorData.message || "Failed to start processing");
-      }
-
-      const processData = await processResponse.json();
       console.log(`[Upload] Processing started:`, processData);
 
       // Step 3: Create video document in Firestore

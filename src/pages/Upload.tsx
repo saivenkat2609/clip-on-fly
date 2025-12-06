@@ -12,8 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload as UploadIcon, Link as LinkIcon, FileVideo, AlertCircle, Loader2 } from "lucide-react";
 import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-
-const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
+import { apiClient } from "@/lib/apiClient";
 
 export default function Upload() {
   const [videoUrl, setVideoUrl] = useState("");
@@ -47,39 +46,22 @@ export default function Upload() {
     setLoading(true);
 
     try {
-      console.log("API Endpoint:", API_ENDPOINT);
-      console.log("Full URL:", `${API_ENDPOINT}/process`);
+      console.log("Starting video processing with secure API client");
       console.log("Request body:", {
         youtube_url: videoUrl,
-        user_id: currentUser.uid,
-        user_email: currentUser.email || "",
         project_name: projectName || "Untitled Project",
         startFrom: "download"
       });
 
-      const response = await fetch(`${API_ENDPOINT}/process`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          youtube_url: videoUrl,
-          user_id: currentUser.uid,
-          user_email: currentUser.email || "",
-          project_name: projectName || "Untitled Project",
-          startFrom: "download"
-        }),
+      // SECURE: Use API client with automatic JWT token injection
+      // user_id and user_email are extracted from the verified JWT token on the backend
+      const data = await apiClient.post('/process', {
+        youtube_url: videoUrl,
+        project_name: projectName || "Untitled Project",
+        startFrom: "download"
       });
 
-      console.log("Response status:", response.status);
-      console.log("Response headers:", Object.fromEntries(response.headers.entries()));
-
-      const data = await response.json();
       console.log("Response data:", data);
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to start processing");
-      }
 
       const sessionId = data.session_id;
 

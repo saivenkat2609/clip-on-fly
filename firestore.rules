@@ -8,7 +8,9 @@ service cloud.firestore {
         match /videos/{videoId} {
           allow read: if request.auth != null && request.auth.uid == userId;
           allow create: if request.auth != null && request.auth.uid == userId;
-          allow update: if true;  // ← This allows Lambda to update!
+          // SECURE: Only the owner can update their videos
+          // Note: Lambda functions use Firebase Admin SDK which bypasses these rules
+          allow update: if request.auth != null && request.auth.uid == userId;
           allow delete: if request.auth != null && request.auth.uid == userId;
         }
       }
