@@ -32,7 +32,7 @@ To allow **anyone** to use your YouTube auto-post feature, you need to **publish
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Sign in with your Google account
 3. Select your project from the dropdown (top left)
-   - Your project should be: `reframe-1e182` or similar
+   - Your project should be: `` or similar
 
 ---
 
@@ -190,7 +190,6 @@ Make sure your production redirect URIs are configured:
 3. Under **"Authorized redirect URIs"**, ensure you have:
 
    ```
-   https://us-central1-reframe-1e182.cloudfunctions.net/youtubeOAuthCallback
    ```
 
    And if your frontend also handles callbacks:

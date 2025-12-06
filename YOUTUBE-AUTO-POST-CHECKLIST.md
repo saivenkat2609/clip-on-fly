@@ -20,7 +20,7 @@ See `GOOGLE-CLOUD-PUBLISH-GUIDE.md` for detailed steps.
 
 **Quick fix** (5 minutes):
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Select project: `reframe-1e182`
+2. Select project: ``
 3. Go to **APIs & Services** → **OAuth consent screen**
 4. Click **"Publish App"**
 5. Click **"Confirm"**
@@ -53,17 +53,17 @@ const encryptionKey = defineSecret("ENCRYPTION_KEY");
 ### Step 1: Set Firebase Active Project
 ```bash
 cd reframe-ai
-firebase use reframe-1e182
+firebase use 
 ```
 
 ### Step 2: Set YouTube Credentials as Secrets
 ```bash
 firebase functions:secrets:set YOUTUBE_CLIENT_ID
-# Paste: 297130463136-1rq6g82c0v0550g56eif7m2pcva8o3ob.apps.googleusercontent.com
+# Paste:
 # Press Enter
 
 firebase functions:secrets:set YOUTUBE_CLIENT_SECRET
-# Paste: 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
+# Paste: 
 # Press Enter
 ```
 
@@ -117,13 +117,12 @@ ENCRYPTION_KEY
 
 ### In Google Cloud Console:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Select project `reframe-1e182`
+2. Select project ``
 3. Go to **APIs & Services** → **Credentials**
 4. Click your OAuth 2.0 Client ID
 5. Under **"Authorized redirect URIs"**, you MUST have:
 
 ```
-https://us-central1-reframe-1e182.cloudfunctions.net/youtubeOAuthCallback
 ```
 
 **Important**: This must match EXACTLY what's in your code at `functions/src/index.ts:108`
@@ -145,7 +144,7 @@ http://localhost:5173/auth/youtube/callback (for development)
 **What to check**:
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Select project `reframe-1e182`
+2. Select project ``
 3. Go to **APIs & Services** → **Library**
 4. Search for: `YouTube Data API v3`
 5. Make sure it shows **"API enabled"** with a green checkmark
@@ -163,7 +162,7 @@ Your Cloud Functions make external API calls (YouTube API), which requires the *
 
 **To check**:
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Select project `reframe-1e182`
+2. Select project ``
 3. Click **Spark/Blaze** (top left, under project name)
 4. If it says "Spark (Free)", you need to upgrade
 
@@ -233,7 +232,7 @@ firebase deploy --only firestore:rules
 Use this checklist to ensure everything is configured:
 
 ### Google Cloud Console Setup
-- [ ] Project created: `reframe-1e182`
+- [ ] Project created: ``
 - [ ] YouTube Data API v3 enabled
 - [ ] OAuth consent screen configured
   - [ ] App name set
@@ -242,15 +241,15 @@ Use this checklist to ensure everything is configured:
     - [ ] `https://www.googleapis.com/auth/youtube.upload`
     - [ ] `https://www.googleapis.com/auth/youtube.force-ssl`
 - [ ] OAuth 2.0 credentials created
-  - [ ] Client ID: `297130463136-1rq6g82c0v0550g56eif7m2pcva8o3ob.apps.googleusercontent.com`
-  - [ ] Client Secret: `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`
+  - [ ] Client ID: 
+  - [ ] Client Secret: ``
 - [ ] Authorized redirect URIs configured:
-  - [ ] `https://us-central1-reframe-1e182.cloudfunctions.net/youtubeOAuthCallback`
+  - [ ] ``
   - [ ] Your production domain callback (if applicable)
 - [ ] **App published** (most important!)
 
 ### Firebase Setup
-- [ ] Firebase project: `reframe-1e182`
+- [ ] Firebase project: ``
 - [ ] Blaze plan enabled
 - [ ] Cloud Functions deployed
 - [ ] Firebase secrets configured:
@@ -389,7 +388,7 @@ Use this checklist to ensure everything is configured:
 **Solution**:
 ```bash
 cd reframe-ai
-firebase use reframe-1e182
+firebase use 
 ```
 
 ---
@@ -419,7 +418,7 @@ To get YouTube auto-post working online:
 
 ```bash
 # Set active Firebase project
-firebase use reframe-1e182
+firebase use 
 
 # Set secrets
 firebase functions:secrets:set YOUTUBE_CLIENT_ID
@@ -455,7 +454,7 @@ firebase functions:log --limit 50
 
 **In Firebase Console**:
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Select `reframe-1e182`
+2. Select ``
 3. Click **Functions** (left sidebar)
 4. Click on a function name
 5. Click **Logs** tab
@@ -463,7 +462,7 @@ firebase functions:log --limit 50
 ### Check YouTube API Quota
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Select `reframe-1e182`
+2. Select ``
 3. Go to **APIs & Services** → **Dashboard**
 4. Click **YouTube Data API v3**
 5. View quota usage graph
