@@ -34,6 +34,14 @@ export function VideoPreview({ src, poster, onReady }: VideoPreviewProps) {
             inline: false
           }
         },
+        // Force no caching to ensure fresh video loads
+        html5: {
+          vhs: {
+            overrideNative: true
+          },
+          nativeVideoTracks: false,
+          nativeAudioTracks: false
+        },
         sources: [
           {
             src: src,
@@ -47,7 +55,41 @@ export function VideoPreview({ src, poster, onReady }: VideoPreviewProps) {
         onReady && onReady(player);
       });
     }
-  }, [src, poster, onReady]);
+  }, [poster, onReady]);
+
+  // Update video source when src changes (critical for template reprocessing)
+  useEffect(() => {
+    const player = playerRef.current;
+
+    if (player && !player.isDisposed()) {
+      console.log("[VideoPreview] Source changed, forcing complete reload:", src);
+
+      // Aggressive reload strategy to bypass all caches
+      player.pause();
+      player.reset(); // Reset player state completely
+
+      // Wait a tick for reset to complete, then set new source
+      setTimeout(() => {
+        if (player && !player.isDisposed()) {
+          // Set new source directly (no intermediate empty source to avoid errors)
+          player.src({
+            src: src,
+            type: "video/mp4",
+          });
+
+          // Force complete reload from network
+          player.load();
+
+          // Auto-play the new video
+          player.play().catch((err) => {
+            console.warn("[VideoPreview] Auto-play prevented:", err);
+          });
+
+          console.log("[VideoPreview] ✅ Video reloaded successfully");
+        }
+      }, 100);
+    }
+  }, [src]);
 
   // Dispose the Video.js player when the component unmounts
   useEffect(() => {

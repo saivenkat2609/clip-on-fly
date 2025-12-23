@@ -6,16 +6,24 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Mail, Lock, Chrome, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { validateEmailStrictGmailOnly } from '@/lib/emailValidator';
 import { fetchSignInMethodsForEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { PasswordInput } from '@/components/PasswordInput';
+import { setSessionPersistence } from '@/lib/sessionManager';
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Remember Me and failed login tracking
+  const [rememberMe, setRememberMe] = useState(true);
+  const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
 
   // Provider conflict state (for MongoDB Atlas style prompts)
   const [providerConflict, setProviderConflict] = useState<{
@@ -36,6 +44,9 @@ export default function Login() {
   const [signupErrors, setSignupErrors] = useState({ email: '', password: '', confirmPassword: '' });
   const [emailValidationStatus, setEmailValidationStatus] = useState<'idle' | 'valid' | 'invalid'>('idle');
 
+  // Password validation state for signup
+  const [isPasswordBreached, setIsPasswordBreached] = useState(false);
+
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -54,6 +65,7 @@ export default function Login() {
     setSignupErrors({ email: '', password: '', confirmPassword: '' });
     setEmailValidationStatus('idle');
     setProviderConflict(null);
+    setIsPasswordBreached(false);
   }, [isSignUp]);
 
   // Real-time email validation for signup
@@ -178,7 +190,14 @@ export default function Login() {
     setLoading(true);
     setProviderConflict(null);
     try {
+      // Set session persistence based on Remember Me checkbox
+      await setSessionPersistence(rememberMe);
+
       await signIn(loginEmail, loginPassword);
+
+      // Reset failed attempts on successful login
+      setFailedLoginAttempts(0);
+
       toast({
         title: 'Welcome back!',
         description: 'You have successfully signed in.',
@@ -186,7 +205,7 @@ export default function Login() {
       navigate(from, { replace: true });
     } catch (error: any) {
       // Check if account exists with Google only (MongoDB Atlas pattern)
-      if (error.code === 'auth/wrong-password' && error.message.includes('Google')) {
+      if ((error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') && error.message.includes('Google sign-in')) {
         setProviderConflict({
           email: loginEmail,
           suggestedProvider: 'google',
@@ -197,20 +216,19 @@ export default function Login() {
           ...prev,
           email: 'No account found with this email. Please sign up first.'
         }));
-      } else if (error.code === 'auth/wrong-password') {
+      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        // Track failed attempts
+        const newAttempts = failedLoginAttempts + 1;
+        setFailedLoginAttempts(newAttempts);
+
         setLoginErrors(prev => ({
           ...prev,
           password: 'Incorrect password. Please try again.'
         }));
-      } else if (error.code === 'auth/invalid-credential') {
-        setLoginErrors(prev => ({
-          ...prev,
-          password: 'Invalid credentials. Please check your email and password.'
-        }));
       } else if (error.code === 'auth/too-many-requests') {
         setLoginErrors(prev => ({
           ...prev,
-          password: 'Too many failed attempts. Please try again later.'
+          password: 'Too many failed attempts. Please wait before trying again.'
         }));
       } else if (error.message) {
         toast({
@@ -234,6 +252,9 @@ export default function Login() {
     setLoading(true);
     setProviderConflict(null);
     try {
+      // Set persistent session for new signups (default to 7 days)
+      await setSessionPersistence(true);
+
       await signUp(signupEmail, signupPassword);
       toast({
         title: 'Account created successfully!',
@@ -293,6 +314,14 @@ export default function Login() {
     setGoogleLoading(true);
     setProviderConflict(null);
     try {
+      // Set session persistence based on Remember Me checkbox (only in login mode)
+      if (!isSignUp) {
+        await setSessionPersistence(rememberMe);
+      } else {
+        // Default to persistent for signups
+        await setSessionPersistence(true);
+      }
+
       await signInWithGoogle();
       navigate(from, { replace: true });
     } catch (error: any) {
@@ -443,36 +472,27 @@ export default function Login() {
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="signup-password" className="text-sm font-medium">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupPassword}
-                      onChange={(e) => {
-                        setSignupPassword(e.target.value);
-                        setSignupErrors(prev => ({ ...prev, password: '' }));
-                      }}
-                      disabled={loading}
-                      className="pl-10"
-                    />
-                  </div>
-                  {signupErrors.password && (
-                    <p className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {signupErrors.password}
-                    </p>
-                  )}
-                </div>
+                {/* Enhanced Password Input with Strength Meter */}
+                <PasswordInput
+                  label="Password"
+                  value={signupPassword}
+                  onChange={(value) => {
+                    setSignupPassword(value);
+                    setSignupErrors(prev => ({ ...prev, password: '' }));
+                  }}
+                  placeholder="Create a strong password"
+                  showStrengthMeter={true}
+                  checkBreaches={true}
+                  error={signupErrors.password}
+                  required={true}
+                  autoComplete="new-password"
+                  onBreachStatusChange={setIsPasswordBreached}
+                />
 
                 <div className="space-y-2">
                   <label htmlFor="signup-confirm-password" className="text-sm font-medium">
                     Confirm Password
+                    <span className="text-red-500 ml-1">*</span>
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -497,9 +517,29 @@ export default function Login() {
                   )}
                 </div>
 
-                <Button type="submit" className="w-full gradient-primary" disabled={loading}>
+                {/* Disable button if password is breached or too short */}
+                <Button
+                  type="submit"
+                  className="w-full gradient-primary"
+                  disabled={
+                    loading ||
+                    isPasswordBreached ||
+                    signupPassword.length < 8 ||
+                    signupPassword !== signupConfirmPassword ||
+                    emailValidationStatus === 'invalid'
+                  }
+                >
                   {loading ? 'Creating account...' : 'Create account'}
                 </Button>
+
+                {/* Helper text when button is disabled */}
+                {!loading && (isPasswordBreached || signupPassword.length < 8 || signupPassword !== signupConfirmPassword) && signupPassword && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    {isPasswordBreached && '⚠️ Cannot create account with breached password'}
+                    {!isPasswordBreached && signupPassword.length < 8 && '⚠️ Password must be at least 8 characters'}
+                    {!isPasswordBreached && signupPassword.length >= 8 && signupPassword !== signupConfirmPassword && '⚠️ Passwords must match'}
+                  </p>
+                )}
               </form>
             ) : (
               /* Login Form */
@@ -556,14 +596,47 @@ export default function Login() {
                       {loginErrors.password}
                     </p>
                   )}
-                  <div className="flex justify-end">
-                    <Link
-                      to="/forgot-password"
-                      className="text-xs text-muted-foreground hover:text-primary"
+
+                  {/* Failed Attempts Warning */}
+                  {failedLoginAttempts >= 3 && (
+                    <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
+                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                          {5 - failedLoginAttempts > 0
+                            ? `${5 - failedLoginAttempts} attempts left`
+                            : 'Too many attempts'}
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                          Try "Forgot password?" if you need help
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Remember Me & Forgot Password */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="remember-me"
+                      checked={rememberMe}
+                      onCheckedChange={(checked) => setRememberMe(!!checked)}
+                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                    />
+                    <Label
+                      htmlFor="remember-me"
+                      className="text-sm font-medium cursor-pointer select-none"
                     >
-                      Forgot password?
-                    </Link>
+                      Remember me
+                    </Label>
                   </div>
+                  <Link
+                    to="/forgot-password"
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
 
                 <Button type="submit" className="w-full gradient-primary" disabled={loading}>

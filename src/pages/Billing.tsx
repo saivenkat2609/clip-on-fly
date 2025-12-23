@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Check, Zap, Calendar } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, onSnapshot, doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useUserPlan } from "@/hooks/useUserProfile";
+import { useVideos } from "@/hooks/useVideos";
 
 interface VideoClip {
   clipIndex: number;
@@ -94,104 +94,51 @@ const plansData = [
 export default function Billing() {
   const { currentUser } = useAuth();
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [projectsCount, setProjectsCount] = useState(0);
-  const [clipsCount, setClipsCount] = useState(0);
-  const [userPlan, setUserPlan] = useState<string>("Free");
-  const [totalCredits, setTotalCredits] = useState<number>(60);
-  const [usedCredits, setUsedCredits] = useState<number>(0);
-  const [creditsExpiry, setCreditsExpiry] = useState<Date | null>(null);
 
-  // Fetch user plan and credits data
-  useEffect(() => {
-    if (!currentUser) return;
+  // Use cached hooks
+  const { plan: userPlan = "Free", totalCredits = 60, creditsExpiryDate } = useUserPlan();
+  const { data: videos = [] } = useVideos();
 
-    const fetchUserData = async () => {
-      try {
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
+  // Convert Firestore timestamp or ISO string to Date
+  const creditsExpiry = useMemo(() => {
+    if (!creditsExpiryDate) return null;
 
-        if (userDocSnap.exists()) {
-          const userData = userDocSnap.data();
-          const plan = userData.plan || "Free";
-          setUserPlan(plan);
+    // Handle Firestore Timestamp
+    if (creditsExpiryDate?.toDate) {
+      return creditsExpiryDate.toDate();
+    }
 
-          // Get total credits based on plan
-          let planCredits = userData.totalCredits || 60;
-          if (!userData.totalCredits) {
-            // Set default credits based on plan
-            planCredits = plan === "Professional" ? 500 : plan === "Starter" ? 300 : 60;
-          }
-          setTotalCredits(planCredits);
+    // Handle ISO string from cache
+    if (typeof creditsExpiryDate === 'string') {
+      return new Date(creditsExpiryDate);
+    }
 
-          // Get credits expiry
-          const expiryDate = userData.creditsExpiryDate?.toDate() || null;
-          setCreditsExpiry(expiryDate);
-        }
-      } catch (err) {
-        console.error("Error fetching user data:", err);
+    return null;
+  }, [creditsExpiryDate]);
+
+  // Calculate stats from videos - memoized for performance
+  const { projectsCount, clipsCount, usedCredits } = useMemo(() => {
+    const totalProjects = videos.length;
+    const totalClips = videos.reduce((acc, video) => {
+      return acc + (video.clips?.length || 0);
+    }, 0);
+
+    // Calculate used credits (sum of all video durations in minutes)
+    const creditsUsed = videos.reduce((sum, video) => {
+      if (video.videoInfo?.duration) {
+        const durationInSeconds = video.videoInfo.duration;
+        const durationInMinutes = Math.floor(durationInSeconds / 60);
+        return sum + durationInMinutes;
       }
+      return sum;
+    }, 0);
+
+    return {
+      projectsCount: totalProjects,
+      clipsCount: totalClips,
+      usedCredits: creditsUsed,
     };
-
-    fetchUserData();
-  }, [currentUser]);
-
-  // Fetch videos data from Firebase
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const videosRef = collection(db, `users/${currentUser.uid}/videos`);
-    const q = query(videosRef);
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const videosData: Video[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Video));
-
-        setVideos(videosData);
-
-        // Calculate stats
-        const totalProjects = videosData.length;
-        const totalClips = videosData.reduce((acc, video) => {
-          return acc + (video.clips?.length || 0);
-        }, 0);
-
-        setProjectsCount(totalProjects);
-        setClipsCount(totalClips);
-
-        // Calculate used credits (sum of all video durations in minutes)
-        console.log("=== CREDITS CALCULATION DEBUG ===");
-        console.log(`Total videos: ${videosData.length}`);
-
-        const creditsUsed = videosData.reduce((sum, video) => {
-          if (video.videoInfo?.duration) {
-            const durationInSeconds = video.videoInfo.duration;
-            const durationInMinutes = Math.floor(durationInSeconds / 60);
-            console.log(`Video ${video.id}: ${durationInSeconds}s = ${durationInMinutes} minutes (credits)`);
-            return sum + durationInMinutes;
-          } else {
-            console.log(`Video ${video.id}: No duration info`);
-          }
-          return sum;
-        }, 0);
-
-        console.log(`Total credits used: ${creditsUsed} minutes`);
-        console.log(`Total credits available: ${totalCredits} minutes`);
-        console.log(`Credits remaining: ${Math.max(0, totalCredits - creditsUsed)} minutes`);
-        console.log("=================================");
-
-        setUsedCredits(creditsUsed);
-      },
-      (err) => {
-        console.error("Error fetching videos:", err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [currentUser, totalCredits]);
+  }, [videos]);
 
   // Generate plans with current pricing based on billing period
   const plans = plansData.map(plan => ({

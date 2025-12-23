@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import {
   User,
   createUserWithEmailAndPassword,
@@ -15,11 +15,24 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
   reauthenticateWithPopup,
+  linkWithPopup,
+  linkWithCredential,
+  unlink,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { validateEmailStrictGmailOnly } from '@/lib/emailValidator';
 import { useToast } from '@/hooks/use-toast';
+import {
+  ActivityTracker,
+  INACTIVITY_TIMEOUT,
+  INACTIVITY_WARNING_TIME,
+  getDeviceType,
+  getBrowser,
+  getOS,
+  getClientIP,
+  getLocationFromIP,
+} from '@/lib/sessionManager';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -33,6 +46,10 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  linkGoogleProvider: () => Promise<void>;
+  linkPasswordProvider: (password: string) => Promise<void>;
+  unlinkProvider: (providerId: 'google.com' | 'password') => Promise<void>;
+  getLinkedProviders: () => { google: boolean; password: boolean };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -52,7 +69,36 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const { toast } = useToast();
+
+  // Activity tracking
+  const activityTracker = useRef<ActivityTracker | null>(null);
+
+  // Helper function to log session info to Firestore
+  async function logSessionInfo(userId: string, method: 'google' | 'password') {
+    try {
+      const [ipAddress, location] = await Promise.all([
+        getClientIP(),
+        getLocationFromIP()
+      ]);
+
+      await addDoc(collection(db, 'users', userId, 'loginHistory'), {
+        timestamp: serverTimestamp(),
+        success: true,
+        method: method,
+        deviceType: getDeviceType(),
+        browser: getBrowser(),
+        os: getOS(),
+        location: location,
+        ipAddress: ipAddress,
+        flagged: false,
+      });
+    } catch (error) {
+      // Don't fail login if session logging fails
+      console.error('Failed to log session:', error);
+    }
+  }
 
   async function signUp(email: string, password: string) {
     // STRICT validation - only Gmail addresses allowed
@@ -66,12 +112,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const signInMethods = await fetchSignInMethodsForEmail(auth, email);
 
       if (signInMethods.length > 0) {
-        // Email already exists
+        // Email already exists - guide user to sign in instead
         const hasGoogleProvider = signInMethods.includes('google.com');
         const hasPasswordProvider = signInMethods.includes('password');
 
-        if (hasGoogleProvider) {
-          const error = new Error('This email is already registered with Google. Please use the "Continue with Google" button to sign in.');
+        if (hasGoogleProvider && hasPasswordProvider) {
+          const error = new Error('This email is already registered. Please sign in using Google or your password.');
+          (error as any).code = 'auth/email-already-in-use';
+          throw error;
+        } else if (hasGoogleProvider) {
+          const error = new Error('This email is already registered with Google. Please use "Continue with Google" to sign in.');
           (error as any).code = 'auth/email-already-in-use';
           throw error;
         } else if (hasPasswordProvider) {
@@ -108,7 +158,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
           emailVerified: false,
-          provider: 'password',
+          provider: 'password', // Primary provider
+          providers: ['password'], // All linked providers
           totalVideos: 0,
           totalClips: 0,
           storageUsed: 0,
@@ -137,39 +188,58 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   async function signIn(email: string, password: string) {
+    // First check what sign-in methods are available for this email
+    let signInMethods: string[] = [];
     try {
-      // Check what sign-in methods are available for this email
-      const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+      signInMethods = await fetchSignInMethodsForEmail(auth, email);
+    } catch (fetchError: any) {
+      // If fetchSignInMethodsForEmail fails, continue to sign-in attempt
+      console.log('Could not fetch sign-in methods:', fetchError);
+    }
 
-      if (signInMethods.length === 0) {
-        // No account exists
-        const error = new Error('No account found with this email. Please sign up first.');
-        (error as any).code = 'auth/user-not-found';
-        throw error;
-      }
+    // If we successfully fetched methods, check them
+    if (signInMethods.length > 0) {
+      const hasPassword = signInMethods.includes('password');
+      const hasGoogle = signInMethods.includes('google.com');
 
-      const hasGoogleProvider = signInMethods.includes('google.com');
-      const hasPasswordProvider = signInMethods.includes('password');
-
-      if (hasGoogleProvider && !hasPasswordProvider) {
-        // Account exists with Google only
-        const error = new Error('This account was created with Google. Please use the "Continue with Google" button to sign in.');
+      // If account exists with Google but NO password, block sign-in
+      if (hasGoogle && !hasPassword) {
+        const error = new Error('This account uses Google sign-in only. Please use the "Continue with Google" button to sign in.');
         (error as any).code = 'auth/wrong-password';
         throw error;
       }
 
+      // If no methods found at all
+      if (signInMethods.length === 0) {
+        const error = new Error('No account found with this email. Please sign up first.');
+        (error as any).code = 'auth/user-not-found';
+        throw error;
+      }
+    }
+
+    try {
       // Attempt to sign in with password
-      await signInWithEmailAndPassword(auth, email, password);
+      const result = await signInWithEmailAndPassword(auth, email, password);
+
+      // Update Firestore last login
+      const userDocRef = doc(db, 'users', result.user.uid);
+      await setDoc(userDocRef, {
+        lastLogin: serverTimestamp(),
+      }, { merge: true });
+
+      // Log session information (non-blocking)
+      if (result.user) {
+        logSessionInfo(result.user.uid, 'password').catch(console.error);
+      }
     } catch (error: any) {
-      // If it's a Firebase auth error, let it pass through
-      // Our custom errors already have the right code
+      // Throw original error
       throw error;
     }
   }
 
   async function signInWithGoogle() {
     try {
-      // First, get the Google account email to check existing providers
+      // Sign in with Google popup
       const result = await signInWithPopup(auth, googleProvider);
       const email = result.user.email;
 
@@ -187,24 +257,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error('Only Gmail accounts are allowed. Please sign in with a Gmail account.');
       }
 
-      // Check if this email was previously registered with email/password
-      const signInMethods = await fetchSignInMethodsForEmail(auth, email);
-      const hasPasswordProvider = signInMethods.includes('password');
-      const hasGoogleProvider = signInMethods.includes('google.com');
-
-      // If user already has a password account but not Google, this means Firebase just linked them automatically
-      // MongoDB Atlas pattern: we should prevent this and tell them to use their password
-      if (hasPasswordProvider && !hasGoogleProvider) {
-        // Sign out the automatically created/linked account
-        await signOut(auth);
-        const error = new Error('This email is already registered with a password. Please sign in using your email and password instead.');
-        (error as any).code = 'auth/account-exists-with-different-credential';
-        throw error;
-      }
-
-      // Google OAuth emails are already verified, no additional checks needed
-
-      // Create or update user profile in Firestore
+      // Check if user document exists in Firestore
       const userDocRef = doc(db, 'users', result.user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
@@ -222,7 +275,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
           emailVerified: true,
-          provider: 'google',
+          provider: 'google', // Primary provider
+          providers: ['google'], // All linked providers
           totalVideos: 0,
           totalClips: 0,
           storageUsed: 0,
@@ -239,11 +293,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
         });
       } else {
-        // Update last login for existing user
-        await setDoc(userDocRef, {
-          lastLogin: serverTimestamp()
-        }, { merge: true });
+        // User already exists - update providers array if Google not already linked
+        const userData = userDocSnap.data();
+        const providers = userData.providers || [userData.provider]; // Fallback for old schema
+
+        // Add 'google' to providers array if not already there (account linking)
+        if (!providers.includes('google')) {
+          await setDoc(userDocRef, {
+            providers: [...providers, 'google'],
+            lastLogin: serverTimestamp(),
+            photoURL: result.user.photoURL, // Update photo from Google
+          }, { merge: true });
+
+          toast({
+            title: 'Account linked!',
+            description: 'Google sign-in has been linked to your account. You can now use either method to sign in.',
+          });
+        } else {
+          // Just update last login
+          await setDoc(userDocRef, {
+            lastLogin: serverTimestamp(),
+          }, { merge: true });
+        }
       }
+
+      // Log session information (non-blocking)
+      logSessionInfo(result.user.uid, 'google').catch(console.error);
 
       toast({
         title: 'Welcome!',
@@ -371,6 +446,214 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  // Get linked providers
+  function getLinkedProviders() {
+    if (!currentUser) {
+      return { google: false, password: false };
+    }
+
+    const providers = currentUser.providerData.map(p => p.providerId);
+    return {
+      google: providers.includes('google.com'),
+      password: providers.includes('password'),
+    };
+  }
+
+  // Link Google provider to existing account
+  async function linkGoogleProvider() {
+    if (!currentUser) {
+      throw new Error('No user is currently signed in');
+    }
+
+    const { google, password } = getLinkedProviders();
+    if (google) {
+      throw new Error('Google account is already linked');
+    }
+
+    try {
+      const result = await linkWithPopup(currentUser, googleProvider);
+
+      // Update Firestore to reflect Google is now linked
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await setDoc(userDocRef, {
+        provider: 'google', // Update primary provider if desired
+        lastLogin: serverTimestamp(),
+      }, { merge: true });
+
+      // Log the account linking
+      await addDoc(collection(db, 'users', currentUser.uid, 'accountLinkingHistory'), {
+        action: 'link',
+        provider: 'google',
+        timestamp: serverTimestamp(),
+        ipAddress: await getClientIP(),
+      });
+
+      toast({
+        title: 'Google account linked',
+        description: 'You can now sign in with Google or your password.',
+      });
+
+      // Refresh user to get updated provider data
+      await refreshUser();
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        return;
+      }
+      if (error.code === 'auth/credential-already-in-use') {
+        throw new Error('This Google account is already linked to another user');
+      }
+      throw error;
+    }
+  }
+
+  // Link password provider to existing Google-only account
+  async function linkPasswordProvider(password: string) {
+    if (!currentUser || !currentUser.email) {
+      throw new Error('No user is currently signed in');
+    }
+
+    const { google, password: hasPassword } = getLinkedProviders();
+    if (hasPassword) {
+      throw new Error('Password authentication is already set up');
+    }
+
+    if (!google) {
+      throw new Error('Can only add password to Google accounts');
+    }
+
+    if (password.length < 8) {
+      throw new Error('Password must be at least 8 characters');
+    }
+
+    try {
+      // Create email/password credential
+      const credential = EmailAuthProvider.credential(currentUser.email, password);
+
+      // Link it to the current user
+      await linkWithCredential(currentUser, credential);
+
+      // Update Firestore
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await setDoc(userDocRef, {
+        lastLogin: serverTimestamp(),
+      }, { merge: true });
+
+      // Log the account linking
+      await addDoc(collection(db, 'users', currentUser.uid, 'accountLinkingHistory'), {
+        action: 'link',
+        provider: 'password',
+        timestamp: serverTimestamp(),
+        ipAddress: await getClientIP(),
+      });
+
+      toast({
+        title: 'Password added',
+        description: 'You can now sign in with your email and password.',
+      });
+
+      // Refresh user to get updated provider data
+      await refreshUser();
+    } catch (error: any) {
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error('This email is already in use by another account');
+      }
+      if (error.code === 'auth/weak-password') {
+        throw new Error('Password is too weak. Please use a stronger password.');
+      }
+      throw error;
+    }
+  }
+
+  // Unlink a provider (requires at least one method to remain)
+  async function unlinkProvider(providerId: 'google.com' | 'password') {
+    if (!currentUser) {
+      throw new Error('No user is currently signed in');
+    }
+
+    const { google, password } = getLinkedProviders();
+    const providerCount = (google ? 1 : 0) + (password ? 1 : 0);
+
+    if (providerCount <= 1) {
+      throw new Error('Cannot unlink your only sign-in method. Please add another method first.');
+    }
+
+    const providerName = providerId === 'google.com' ? 'Google' : 'password';
+
+    try {
+      await unlink(currentUser, providerId);
+
+      // Log the unlinking
+      await addDoc(collection(db, 'users', currentUser.uid, 'accountLinkingHistory'), {
+        action: 'unlink',
+        provider: providerId === 'google.com' ? 'google' : 'password',
+        timestamp: serverTimestamp(),
+        ipAddress: await getClientIP(),
+      });
+
+      toast({
+        title: `${providerName} unlinked`,
+        description: `You can no longer sign in with ${providerName}.`,
+      });
+
+      // Refresh user to get updated provider data
+      await refreshUser();
+    } catch (error: any) {
+      if (error.code === 'auth/no-such-provider') {
+        throw new Error(`${providerName} is not linked to your account`);
+      }
+      throw error;
+    }
+  }
+
+  // Initialize activity tracker
+  useEffect(() => {
+    activityTracker.current = new ActivityTracker();
+    activityTracker.current.onActivity(() => {
+      setShowInactivityWarning(false);
+    });
+
+    return () => {
+      activityTracker.current = null;
+    };
+  }, []);
+
+  // Check for inactivity and auto-logout
+  useEffect(() => {
+    if (!currentUser || !activityTracker.current) return;
+
+    const interval = setInterval(() => {
+      if (!activityTracker.current) return;
+
+      const inactiveTime = activityTracker.current.getInactiveTime();
+
+      // Show warning 5 minutes before auto-logout
+      if (inactiveTime > INACTIVITY_TIMEOUT - INACTIVITY_WARNING_TIME &&
+          inactiveTime < INACTIVITY_TIMEOUT) {
+        if (!showInactivityWarning) {
+          setShowInactivityWarning(true);
+          const remainingMinutes = Math.ceil((INACTIVITY_TIMEOUT - inactiveTime) / 60000);
+          toast({
+            title: 'Inactivity Warning',
+            description: `You will be automatically signed out in ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''} due to inactivity.`,
+            duration: 10000,
+          });
+        }
+      }
+
+      // Auto logout after inactivity timeout
+      if (inactiveTime > INACTIVITY_TIMEOUT) {
+        logout();
+        toast({
+          title: 'Signed out due to inactivity',
+          description: 'You were automatically signed out after 30 minutes of inactivity. Please sign in again to continue.',
+          duration: 7000,
+        });
+      }
+    }, 60 * 1000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [currentUser, showInactivityWarning]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -392,6 +675,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     changePassword,
     resendVerificationEmail,
     refreshUser,
+    linkGoogleProvider,
+    linkPasswordProvider,
+    unlinkProvider,
+    getLinkedProviders,
   };
 
   return (

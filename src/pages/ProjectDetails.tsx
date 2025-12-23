@@ -9,11 +9,12 @@ import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { YouTubePostModal } from "@/components/YouTubePostModal";
 import { TemplateSelectionModal } from "@/components/TemplateSelectionModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette } from "lucide-react";
+import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Template } from "@/lib/templates";
+import { Template, templates } from "@/lib/templates";
+import { useTemplateReprocess } from "@/hooks/useTemplateReprocess";
 import {
   Select,
   SelectContent,
@@ -50,6 +51,8 @@ interface VideoClip {
   disliked?: boolean;
   edited?: boolean;
   templateId?: string;
+  template_id?: string;  // Also support snake_case from backend
+  template_name?: string;  // NEW: Template name from backend
 }
 
 interface Video {
@@ -90,6 +93,9 @@ export default function ProjectDetails() {
   // Filter and Sort state
   const [activeFilters, setActiveFilters] = useState<FilterType[]>(["all"]);
   const [sortBy, setSortBy] = useState<SortType>("chronological");
+
+  // Template reprocess hook
+  const { reprocessClip, isReprocessing } = useTemplateReprocess();
 
   // Fetch user plan
   useEffect(() => {
@@ -200,29 +206,66 @@ export default function ProjectDetails() {
     }
   };
 
-  // Handle template selection
+  // Handle template selection and reprocessing
   const handleTemplateSelect = async (template: Template) => {
     if (!currentUser || !sessionId || !video || selectedClipForTemplate === null) return;
 
-    const updatedClips = video.clips?.map((clip) => {
-      if (clip.clipIndex === selectedClipForTemplate) {
-        return {
-          ...clip,
-          templateId: template.id,
-          edited: true // Mark clip as edited
-        };
-      }
-      return clip;
-    });
+    // Store clip index before clearing state
+    const clipIndex = selectedClipForTemplate;
+
+    // Close modal immediately
+    setSelectedClipForTemplate(null);
+    setTemplateModalOpen(false);
 
     try {
-      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await updateDoc(videoRef, { clips: updatedClips });
-      setVideo({ ...video, clips: updatedClips });
-      setSelectedClipForTemplate(null);
+      // Call reprocess API (this will take ~60 seconds)
+      const result = await reprocessClip({
+        session_id: sessionId,
+        clip_index: clipIndex,
+        template_id: template.id,
+      });
+
+      // When processing completes, update BOTH template name AND video URL
+      if (result) {
+        console.log('[ProjectDetails] Reprocessing completed, updating UI with fresh video and template name');
+
+        // Generate aggressive cache-busting URL
+        const cacheBuster = Date.now();
+        const randomId = Math.random().toString(36).substring(7);
+        let freshUrl = result.download_url;
+        const separator = freshUrl.includes('?') ? '&' : '?';
+        freshUrl = `${freshUrl}${separator}_v=${cacheBuster}&_r=${randomId}`;
+
+        // Update with new template name AND video URL
+        const updatedClips = video.clips?.map((clip) => {
+          if (clip.clipIndex === clipIndex) {
+            return {
+              ...clip,
+              templateId: result.template_id, // Update template ID from result
+              template_id: result.template_id, // Also set snake_case for consistency
+              template_name: result.template_name, // Update template name from result (snake_case to match UI)
+              downloadUrl: freshUrl, // Aggressively cache-busted URL
+              s3Key: result.s3_clip_key,
+              edited: true, // Mark clip as edited
+              lastUpdated: new Date().toISOString(), // Add timestamp to force refresh
+              reprocessedAt: cacheBuster, // Track reprocessing timestamp
+            };
+          }
+          return clip;
+        });
+
+        // Update Firestore
+        const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
+        await updateDoc(videoRef, { clips: updatedClips });
+
+        // Force immediate UI update with new video and template name
+        setVideo({ ...video, clips: updatedClips });
+
+        console.log('[ProjectDetails] ✅ UI updated with new video URL and template:', result.template_name);
+      }
     } catch (err) {
-      console.error("Error updating template:", err);
-      toast.error("Failed to apply template");
+      console.error("Error applying template:", err);
+      // Error toast is already shown by the reprocessClip hook
     }
   };
 
@@ -466,6 +509,7 @@ export default function ProjectDetails() {
                 >
                   <div className="relative aspect-video overflow-hidden bg-muted">
                     <VideoThumbnail
+                      key={`${clip.clipIndex}-${clip.reprocessedAt || clip.lastUpdated || clip.downloadUrl}`}
                       videoUrl={clip.downloadUrl}
                       alt={clip.title || `${videoTitle} - Clip ${clip.clipIndex + 1}`}
                       onClick={() => {
@@ -524,18 +568,25 @@ export default function ProjectDetails() {
                         <div>Trend: {clip.score_breakdown.trend}</div>
                       </div>
                     )} */}
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3 flex-wrap">
                       {clip.duration && (
                         <div className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           <span>{formatDuration(clip.duration)}</span>
                         </div>
                       )}
-                      {/* {clip.startTime !== undefined && (
-                        <span className="text-xs">
-                          {formatDuration(clip.startTime)} - {formatDuration(clip.endTime)}
-                        </span>
-                      )} */}
+                      {(clip.templateId || clip.template_id) && (
+                        <Badge variant="secondary" className="text-xs">
+                          <Palette className="h-2.5 w-2.5 mr-1" />
+                          {clip.template_name || templates.find(t => t.id === (clip.templateId || clip.template_id))?.name || 'Custom'}
+                        </Badge>
+                      )}
+                      {isReprocessing(clip.clipIndex) && (
+                        <Badge variant="outline" className="text-xs animate-pulse">
+                          <RefreshCw className="h-2.5 w-2.5 mr-1 animate-spin" />
+                          Applying Template...
+                        </Badge>
+                      )}
                     </div>
                     {/* Like/Dislike Buttons */}
                     <div className="flex gap-2 mb-3">
@@ -590,9 +641,19 @@ export default function ProjectDetails() {
                         variant="outline"
                         size="sm"
                         className="flex-1"
+                        disabled={isReprocessing(clip.clipIndex)}
                       >
-                        <Palette className="h-3 w-3 mr-1" />
-                        {clip.templateId ? 'Change Template' : 'Apply Template'}
+                        {isReprocessing(clip.clipIndex) ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Palette className="h-3 w-3 mr-1" />
+                            {clip.templateId ? 'Change Template' : 'Apply Template'}
+                          </>
+                        )}
                       </Button>
                       <Button
                         onClick={() => setYoutubePostClip({
@@ -620,6 +681,7 @@ export default function ProjectDetails() {
       {/* Video Preview Modal */}
       {previewVideo && (
         <VideoPreviewModal
+          key={previewVideo.url}
           open={!!previewVideo}
           onOpenChange={(open) => !open && setPreviewVideo(null)}
           videoUrl={previewVideo.url}

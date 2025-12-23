@@ -64,10 +64,10 @@ export function TemplateSelectionModal({
     }
 
     onSelectTemplate(template);
-    toast({
-      title: "Template Applied",
-      description: `${template.name} has been applied to your clip.`,
-    });
+    // toast({
+    //   title: "Template Applied",
+    //   description: `${template.name} has been applied to your clip.`,
+    // });
     onClose();
   };
 

@@ -2,7 +2,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Footer } from "@/components/layout/Footer";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Upload,
   Wand2,
@@ -140,6 +142,21 @@ const faqs = [
 ];
 
 export default function Landing() {
+  const { currentUser, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    if (!loading && currentUser) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [currentUser, loading, navigate]);
+
+  // Show nothing while checking auth or if redirecting
+  if (loading || currentUser) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}

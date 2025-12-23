@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Star, TrendingUp, Lock, Sparkles } from "lucide-react";
-import { templates, getTemplatesByCategory, searchTemplates, getPopularTemplates, getTrendingTemplates, canUserAccessTemplate, Template } from "@/lib/templates";
+import { getTemplatesByCategory, searchTemplates, getPopularTemplates, getTrendingTemplates, canUserAccessTemplate, Template } from "@/lib/templates";
+import { getCachedTemplates } from "@/lib/templateCache";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { useUserPlan } from "@/hooks/useUserProfile";
 
 const categories = ["All", "Professional", "Creative", "Tech", "Lifestyle"];
 
@@ -20,35 +20,13 @@ export default function Templates() {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Use cached templates
+  const templates = getCachedTemplates();
   const [filteredTemplates, setFilteredTemplates] = useState<Template[]>(templates);
-  const [userPlan, setUserPlan] = useState<'Free' | 'Starter' | 'Professional'>('Free');
-  const [loading, setLoading] = useState(true);
 
-  // Fetch user plan
-  useEffect(() => {
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchUserPlan = async () => {
-      try {
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (userDocSnap.exists()) {
-          const userData = userDocSnap.data();
-          setUserPlan(userData.plan || 'Free');
-        }
-      } catch (err) {
-        console.error("Error fetching user plan:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUserPlan();
-  }, [currentUser]);
+  // Use cached user plan
+  const { plan: userPlan = 'Free', isLoading: loading } = useUserPlan();
 
   // Filter templates based on search and category
   useEffect(() => {

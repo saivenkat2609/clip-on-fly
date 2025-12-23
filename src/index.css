@@ -44,13 +44,14 @@ All colors MUST be HSL.
 
     --radius: 0.75rem;
 
-    --sidebar-background: 240 10% 10%;
-    --sidebar-foreground: 240 5% 90%;
+    /* Sidebar - Light Mode (sleek light design) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 10% 10%;
     --sidebar-primary: 250 80% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 8% 15%;
-    --sidebar-accent-foreground: 240 5% 90%;
-    --sidebar-border: 240 8% 20%;
+    --sidebar-accent: 250 80% 98%;
+    --sidebar-accent-foreground: 250 80% 40%;
+    --sidebar-border: 240 6% 90%;
     --sidebar-ring: 250 80% 60%;
 
     /* Custom design tokens */
@@ -152,6 +153,16 @@ All colors MUST be HSL.
 
     --border: 240 8% 20%;
     --input: 240 8% 20%;
+
+    /* Sidebar - Dark Mode (sleek dark design) */
+    --sidebar-background: 240 8% 10%;
+    --sidebar-foreground: 240 5% 90%;
+    --sidebar-primary: 250 80% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 8% 15%;
+    --sidebar-accent-foreground: 240 5% 96%;
+    --sidebar-border: 240 8% 18%;
+    --sidebar-ring: 250 80% 60%;
   }
 }
 

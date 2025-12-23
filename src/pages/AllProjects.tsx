@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,8 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Play, Calendar, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useVideos } from "@/hooks/useVideos";
 
 interface VideoClip {
   clipIndex: number;
@@ -48,42 +47,15 @@ interface Video {
 export default function AllProjects() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  // Use cached videos hook with shared listener
+  const { data: videos = [], isLoading: loading, error: queryError } = useVideos();
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
-
-    // Set up real-time listener for user's videos
-    const videosRef = collection(db, `users/${currentUser.uid}/videos`);
-    const q = query(videosRef, orderBy('createdAt', 'desc'));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const videosData: Video[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Video));
-
-        setVideos(videosData);
-        setLoading(false);
-        setError("");
-      },
-      (err) => {
-        console.error("Error fetching videos:", err);
-        setError("Failed to load videos. Please try again.");
-        setLoading(false);
-      }
-    );
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, [currentUser]);
+  // Set error from query if any
+  if (queryError && !error) {
+    setError("Failed to load videos. Please try again.");
+  }
 
   return (
     <AppLayout>
@@ -140,65 +112,60 @@ export default function AllProjects() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5">
               {videos.map((video) => (
                 <Card
                   key={video.id}
-                  className="group overflow-hidden shadow-soft hover:shadow-medium transition-all duration-300 cursor-pointer border-border/50 hover:border-primary/50"
+                  className="group overflow-hidden shadow-soft hover:shadow-large transition-all duration-300 cursor-pointer border-border/50 hover:border-primary/30 rounded-xl"
                   onClick={() => navigate(`/project/${video.sessionId}`)}
                 >
-                  <div className="relative aspect-video overflow-hidden bg-muted">
-                    {/* Show clip thumbnail for completed videos, YouTube thumbnail for others */}
-                    {video.status === 'completed' && video.clips && video.clips.length > 0 ? (
-                      <VideoThumbnail
-                        videoUrl={video.clips[0].downloadUrl}
-                        alt={video.videoInfo?.title || (video.projectName !== "Untitled Project" ? video.projectName : null) || `Video ${video.sessionId.substring(0, 8)}`}
-                        showPlayButton={true}
-                      />
-                    ) : video.videoInfo?.thumbnail ? (
-                      <img
-                        src={video.videoInfo.thumbnail}
-                        alt={video.videoInfo.title || video.projectName}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                        <Play className="h-12 w-12 text-white/70 group-hover:scale-110 transition-transform" />
-                      </div>
-                    )}
+                  <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-muted/50 to-muted">
+                    {/* Smart Thumbnail: YouTube for YT videos, first frame for uploads */}
+                    <VideoThumbnail
+                      // For YouTube videos: Use YouTube thumbnail
+                      youtubeUrl={video.youtubeUrl}
+                      youtubeThumbnail={video.videoInfo?.thumbnail}
+                      // For uploaded videos: Use first clip frame as fallback
+                      videoUrl={video.status === 'completed' && video.clips && video.clips.length > 0
+                        ? video.clips[0].downloadUrl
+                        : undefined}
+                      alt={video.videoInfo?.title || (video.projectName !== "Untitled Project" ? video.projectName : null) || `Video ${video.sessionId.substring(0, 8)}`}
+                      showPlayButton={true}
+                    />
 
+                    {/* Status Badge - Sleeker design */}
                     <Badge
-                      className={`absolute top-2 right-2 z-10 text-xs ${
+                      className={`absolute top-3 right-3 z-10 text-xs font-semibold px-2.5 py-1 shadow-lg backdrop-blur-sm border ${
                         video.status === 'completed'
-                          ? 'bg-green-500'
+                          ? 'bg-green-500/90 border-green-400/50'
                           : video.status === 'processing'
-                          ? 'bg-blue-500'
+                          ? 'bg-blue-500/90 border-blue-400/50'
                           : video.status === 'failed'
-                          ? 'bg-red-500'
-                          : 'bg-gray-500'
-                      } text-white shadow-sm`}
+                          ? 'bg-red-500/90 border-red-400/50'
+                          : 'bg-gray-500/90 border-gray-400/50'
+                      } text-white`}
                     >
                       {video.status === 'completed'
-                        ? `${video.clips?.length || 0} clips`
+                        ? `${video.clips?.length || 0} ${video.clips?.length === 1 ? 'clip' : 'clips'}`
                         : video.status}
                     </Badge>
                   </div>
-                  <CardContent className="p-3">
-                    <h3 className="font-semibold text-sm mb-1.5 line-clamp-1 group-hover:text-primary transition-colors">
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold text-sm mb-2 line-clamp-2 leading-snug group-hover:text-primary transition-colors min-h-[2.5rem]">
                       {video.videoInfo?.title || (video.projectName !== "Untitled Project" ? video.projectName : null) || `Video ${video.sessionId.substring(0, 8)}`}
                     </h3>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span className="font-medium">
                         {video.createdAt?.toDate
-                          ? video.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                          : new Date(video.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          ? video.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : new Date(video.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
                     </div>
 
                     {video.status === 'failed' && video.error && (
-                      <div className="mt-2 pt-2 border-t border-border">
-                        <p className="text-xs text-red-500 line-clamp-1">{video.error}</p>
+                      <div className="mt-2.5 pt-2.5 border-t border-border/60">
+                        <p className="text-xs text-destructive line-clamp-2 font-medium">{video.error}</p>
                       </div>
                     )}
                   </CardContent>

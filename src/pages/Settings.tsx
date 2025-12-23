@@ -1,28 +1,44 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Bell, Key, Users, Palette, Mail, Lock, Shield, CheckCircle2, AlertCircle, Share2, Check } from "lucide-react";
+import { User, Bell, Key, Users, Palette, Mail, Lock, Shield, CheckCircle2, AlertCircle, Share2, Check, Link as LinkIcon } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { YouTubeConnection } from "@/components/YouTubeConnection";
+import { SignInMethodCard } from "@/components/SignInMethodCard";
+import { PasswordInput } from "@/components/PasswordInput";
 import { cn } from "@/lib/utils";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
 import { db } from "@/lib/firebase";
+import { useUserProfile, refreshUserProfile } from "@/hooks/useUserProfile";
 
 export default function Settings() {
   const { theme, mode, setTheme, setMode } = useTheme();
-  const { currentUser, changeEmail, changePassword, resendVerificationEmail, refreshUser } = useAuth();
+  const queryClient = useQueryClient();
+  const {
+    currentUser,
+    changeEmail,
+    changePassword,
+    resendVerificationEmail,
+    refreshUser,
+    linkGoogleProvider,
+    linkPasswordProvider,
+    unlinkProvider,
+    getLinkedProviders,
+  } = useAuth();
 
   // Profile information state
   const [firstName, setFirstName] = useState('');
@@ -45,35 +61,31 @@ export default function Settings() {
   // Email verification state
   const [verificationLoading, setVerificationLoading] = useState(false);
 
-  // Load user profile data from Firestore
+  // Account linking state
+  const [linkingLoading, setLinkingLoading] = useState(false);
+  const [showAddPasswordDialog, setShowAddPasswordDialog] = useState(false);
+  const [newAccountPassword, setNewAccountPassword] = useState('');
+  const [newAccountConfirmPassword, setNewAccountConfirmPassword] = useState('');
+  const [addPasswordError, setAddPasswordError] = useState('');
+
+  // Use cached user profile hook
+  const { data: profile, isLoading: profileDataLoading } = useUserProfile();
+
+  // Load user profile data from cached hook
   useEffect(() => {
-    async function loadProfile() {
-      if (currentUser) {
-        try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
+    if (profile) {
+      const displayName = currentUser?.displayName || '';
+      const names = displayName.split(' ');
+      const fName = names[0] || '';
+      const lName = names.length > 1 ? names[names.length - 1] : '';
+      const comp = profile.company || '';
 
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            const displayName = currentUser.displayName || '';
-            const names = displayName.split(' ');
-            const fName = names[0] || '';
-            const lName = names.length > 1 ? names[names.length - 1] : '';
-            const comp = userData.company || '';
-
-            setFirstName(fName);
-            setLastName(lName);
-            setCompany(comp);
-            setInitialProfileData({ firstName: fName, lastName: lName, company: comp });
-          }
-        } catch (error) {
-          console.error('Failed to load profile:', error);
-        }
-      }
+      setFirstName(fName);
+      setLastName(lName);
+      setCompany(comp);
+      setInitialProfileData({ firstName: fName, lastName: lName, company: comp });
     }
-
-    loadProfile();
-  }, [currentUser]);
+  }, [profile, currentUser]);
 
   // Check if profile data has changed
   const hasProfileChanged = () => {
@@ -159,6 +171,10 @@ export default function Settings() {
         company: normalizedCompany
       });
 
+      // Invalidate profile cache to refetch updated data
+      await refreshUserProfile(currentUser.uid);
+      queryClient.invalidateQueries({ queryKey: ['userProfile', currentUser.uid] });
+
       toast.success('Profile updated successfully!');
     } catch (error: any) {
       console.error('Failed to update profile:', error);
@@ -239,7 +255,71 @@ export default function Settings() {
     }
   };
 
+  // Account linking handlers
+  const handleLinkGoogle = async () => {
+    setLinkingLoading(true);
+    try {
+      await linkGoogleProvider();
+      toast.success('Google account linked successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to link Google account');
+    } finally {
+      setLinkingLoading(false);
+    }
+  };
+
+  const handleAddPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddPasswordError('');
+
+    if (!newAccountPassword || !newAccountConfirmPassword) {
+      setAddPasswordError('Please fill in all fields');
+      return;
+    }
+
+    if (newAccountPassword !== newAccountConfirmPassword) {
+      setAddPasswordError('Passwords do not match');
+      return;
+    }
+
+    if (newAccountPassword.length < 8) {
+      setAddPasswordError('Password must be at least 8 characters');
+      return;
+    }
+
+    setLinkingLoading(true);
+    try {
+      await linkPasswordProvider(newAccountPassword);
+      toast.success('Password added successfully!');
+      setShowAddPasswordDialog(false);
+      setNewAccountPassword('');
+      setNewAccountConfirmPassword('');
+    } catch (error: any) {
+      setAddPasswordError(error.message || 'Failed to add password');
+    } finally {
+      setLinkingLoading(false);
+    }
+  };
+
+  const handleUnlinkProvider = async (providerId: 'google.com' | 'password') => {
+    const providerName = providerId === 'google.com' ? 'Google' : 'password';
+
+    if (!window.confirm(`Are you sure you want to unlink ${providerName}? You will no longer be able to sign in with this method.`)) {
+      return;
+    }
+
+    setLinkingLoading(true);
+    try {
+      await unlinkProvider(providerId);
+    } catch (error: any) {
+      toast.error(error.message || `Failed to unlink ${providerName}`);
+    } finally {
+      setLinkingLoading(false);
+    }
+  };
+
   const isGoogleUser = currentUser?.providerData.some(provider => provider.providerId === 'google.com');
+  const linkedProviders = getLinkedProviders();
 
   const themes = [
     {
@@ -413,32 +493,11 @@ export default function Settings() {
                         <Label
                           htmlFor={t.id}
                           className={cn(
-                            "flex flex-col items-center justify-between rounded-lg border-2 bg-card p-4 cursor-pointer transition-all relative",
+                            "flex flex-col items-center justify-between rounded-lg border-2 p-4 cursor-pointer transition-all relative",
                             theme === t.id
                               ? "border-primary bg-primary/5 shadow-sm"
-                              : "border-border"
+                              : "border-border bg-card hover:border-primary/30 hover:bg-primary/5"
                           )}
-                          style={
-                            theme !== t.id
-                              ? {
-                                  // @ts-ignore
-                                  "--hover-bg": t.hoverBg,
-                                  "--hover-border": t.hoverBorder,
-                                } as React.CSSProperties
-                              : undefined
-                          }
-                          onMouseEnter={(e) => {
-                            if (theme !== t.id) {
-                              e.currentTarget.style.backgroundColor = t.hoverBg;
-                              e.currentTarget.style.borderColor = t.hoverBorder;
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (theme !== t.id) {
-                              e.currentTarget.style.backgroundColor = "";
-                              e.currentTarget.style.borderColor = "";
-                            }
-                          }}
                         >
                           <RadioGroupItem value={t.id} id={t.id} className="sr-only" />
                           {theme === t.id && (
@@ -732,6 +791,122 @@ export default function Settings() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Sign-in Methods */}
+            <Card className="shadow-medium">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LinkIcon className="h-5 w-5" />
+                  Sign-in Methods
+                </CardTitle>
+                <CardDescription>
+                  Manage how you sign in to your account
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Google Sign-in Method */}
+                <SignInMethodCard
+                  provider="google"
+                  connected={linkedProviders.google}
+                  email={linkedProviders.google ? currentUser?.email : undefined}
+                  onLink={handleLinkGoogle}
+                  onUnlink={() => handleUnlinkProvider('google.com')}
+                  loading={linkingLoading}
+                />
+
+                {/* Password Sign-in Method */}
+                <SignInMethodCard
+                  provider="password"
+                  connected={linkedProviders.password}
+                  email={linkedProviders.password ? currentUser?.email : undefined}
+                  onLink={() => setShowAddPasswordDialog(true)}
+                  onUnlink={() => handleUnlinkProvider('password')}
+                  loading={linkingLoading}
+                />
+
+                {/* Info Alert */}
+                <Alert className="mt-4">
+                  <Shield className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    <p className="font-medium mb-1">Multiple sign-in methods</p>
+                    <p className="text-xs text-muted-foreground">
+                      You can link multiple sign-in methods to your account. This gives you flexibility to sign in with either Google or your password. At least one method must remain linked.
+                    </p>
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+
+            {/* Add Password Dialog */}
+            <Dialog open={showAddPasswordDialog} onOpenChange={setShowAddPasswordDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Password to Your Account</DialogTitle>
+                  <DialogDescription>
+                    Create a password to enable email and password sign-in
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleAddPassword} className="space-y-4">
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="new-account-password">Password</Label>
+                      <PasswordInput
+                        value={newAccountPassword}
+                        onChange={(value) => {
+                          setNewAccountPassword(value);
+                          setAddPasswordError('');
+                        }}
+                        placeholder="Create a password"
+                        showStrengthMeter={true}
+                        checkBreaches={true}
+                        autoComplete="new-password"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="confirm-account-password">Confirm Password</Label>
+                      <Input
+                        id="confirm-account-password"
+                        type="password"
+                        placeholder="Confirm your password"
+                        value={newAccountConfirmPassword}
+                        onChange={(e) => {
+                          setNewAccountConfirmPassword(e.target.value);
+                          setAddPasswordError('');
+                        }}
+                        disabled={linkingLoading}
+                      />
+                    </div>
+
+                    {addPasswordError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{addPasswordError}</AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setShowAddPasswordDialog(false);
+                        setNewAccountPassword('');
+                        setNewAccountConfirmPassword('');
+                        setAddPasswordError('');
+                      }}
+                      disabled={linkingLoading}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={linkingLoading}>
+                      {linkingLoading ? 'Adding...' : 'Add Password'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Notifications Settings */}

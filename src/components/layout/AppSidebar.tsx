@@ -1,6 +1,7 @@
 import { Home, Upload, Layout, CreditCard, Settings, Sparkles, LogOut, User } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import {
   Sidebar,
   SidebarContent,
@@ -64,32 +65,37 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className={isCollapsed ? "w-16" : "w-64"} collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border p-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+    <Sidebar className={cn(
+      isCollapsed ? "w-16" : "w-64",
+      "border-r border-sidebar-border shadow-sm"
+    )} collapsible="icon">
+      <SidebarHeader className="border-b border-sidebar-border p-4 transition-all">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-dark shadow-md group-hover:shadow-lg transition-all">
             <Sparkles className="h-5 w-5 text-primary-foreground" />
           </div>
           {!isCollapsed && (
-            <span className="text-lg font-bold text-sidebar-foreground">ClipForge</span>
+            <span className="text-lg font-bold text-sidebar-foreground bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent">
+              ClipForge
+            </span>
           )}
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="p-2">
+      <SidebarContent className="p-3">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1.5">
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sidebar-foreground transition-smooth hover:bg-sidebar-accent"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sidebar-foreground transition-all hover:bg-sidebar-accent hover:shadow-sm group"
+                      activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold shadow-sm border border-primary/10"
                     >
-                      <item.icon className="h-5 w-5" />
-                      {!isCollapsed && <span>{item.title}</span>}
+                      <item.icon className="h-5 w-5 transition-transform group-hover:scale-110" />
+                      {!isCollapsed && <span className="text-sm">{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -99,18 +105,18 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4">
+      <SidebarFooter className="border-t border-sidebar-border p-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-3 w-full hover:bg-sidebar-accent rounded-lg p-2 transition-smooth">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+            <button className="flex items-center gap-3 w-full hover:bg-sidebar-accent rounded-xl p-2.5 transition-all hover:shadow-sm group">
+              <Avatar className="h-9 w-9 ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary-dark text-primary-foreground text-sm font-semibold">
                   {getUserInitials()}
                 </AvatarFallback>
               </Avatar>
               {!isCollapsed && (
-                <div className="flex flex-col text-left flex-1">
-                  <span className="text-sm font-medium text-sidebar-foreground">
+                <div className="flex flex-col text-left flex-1 min-w-0">
+                  <span className="text-sm font-semibold text-sidebar-foreground truncate">
                     {currentUser?.displayName || "User"}
                   </span>
                   <span className="text-xs text-sidebar-foreground/60 truncate">
@@ -120,23 +126,29 @@ export function AppSidebar() {
               )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>
-              <div className="flex flex-col">
-                <span className="font-medium">{currentUser?.displayName || "User"}</span>
-                <span className="text-xs text-muted-foreground font-normal">
+          <DropdownMenuContent align="end" className="w-56 shadow-lg">
+            <DropdownMenuLabel className="pb-2">
+              <div className="flex flex-col gap-1">
+                <span className="font-semibold text-foreground">{currentUser?.displayName || "User"}</span>
+                <span className="text-xs text-muted-foreground font-normal truncate">
                   {currentUser?.email || ""}
                 </span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/settings")}>
-              <User className="mr-2 h-4 w-4" />
+            <DropdownMenuItem
+              onClick={() => navigate("/settings")}
+              className="cursor-pointer gap-2 py-2"
+            >
+              <User className="h-4 w-4" />
               <span>Account Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
-              <LogOut className="mr-2 h-4 w-4" />
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-destructive focus:text-destructive cursor-pointer gap-2 py-2 font-medium"
+            >
+              <LogOut className="h-4 w-4" />
               <span>Sign Out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
