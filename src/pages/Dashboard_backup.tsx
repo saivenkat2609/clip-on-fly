@@ -1,0 +1,537 @@
+import { useState, useEffect, useMemo } from "react";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { VideoThumbnail } from "@/components/VideoThumbnail";
+import { UploadHero } from "@/components/UploadHero";
+import { FAQSection } from "@/components/FAQSection";
+import { useAuth } from "@/contexts/AuthContext";
+import { Plus, Play, Calendar, Loader2, AlertCircle, Bell } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useVideos } from "@/hooks/useVideos";
+import { useUserPlan } from "@/hooks/useUserProfile";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Zap } from "lucide-react";
+
+interface VideoClip {
+  clipIndex: number;
+  downloadUrl: string;
+  s3Key: string;
+  duration?: number;
+  startTime?: number;
+  endTime?: number;
+  title?: string;
+  virality_score?: number;
+  score_breakdown?: {
+    hook: number;
+    flow: number;
+    engagement: number;
+    trend: number;
+  };
+}
+
+interface Video {
+  id: string;
+  sessionId: string;
+  youtubeUrl: string;
+  projectName: string;
+  status: "pending" | "processing" | "completed" | "failed";
+  createdAt: any;
+  completedAt?: any;
+  videoInfo?: {
+    title?: string;
+    duration?: number;
+    thumbnail?: string;
+  };
+  clips?: VideoClip[];
+  error?: string;
+}
+
+interface Notification {
+  id: string;
+  type: "success" | "info" | "warning" | "error";
+  title: string;
+  message: string;
+  createdAt: any;
+  read: boolean;
+}
+
+const projects = [
+  {
+    id: 1,
+    title: "Marketing Webinar Highlights",
+    thumbnail: "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=400&h=225&fit=crop",
+    duration: "45:30",
+    clips: 8,
+    date: "2 days ago",
+    status: "completed"
+  },
+  {
+    id: 2,
+    title: "Product Demo Session",
+    thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=400&h=225&fit=crop",
+    duration: "28:15",
+    clips: 5,
+    date: "1 week ago",
+    status: "completed"
+  },
+  {
+    id: 3,
+    title: "Podcast Episode #42",
+    thumbnail: "https://images.unsplash.com/photo-1590602847861-f357a9332bbc?w=400&h=225&fit=crop",
+    duration: "1:12:45",
+    clips: 12,
+    date: "2 weeks ago",
+    status: "completed"
+  },
+  {
+    id: 4,
+    title: "Interview with CEO",
+    thumbnail: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=225&fit=crop",
+    duration: "35:20",
+    clips: 6,
+    date: "3 weeks ago",
+    status: "completed"
+  },
+  {
+    id: 5,
+    title: "Tutorial Series Compilation",
+    thumbnail: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&h=225&fit=crop",
+    duration: "52:10",
+    clips: 10,
+    date: "1 month ago",
+    status: "completed"
+  },
+  {
+    id: 6,
+    title: "Live Stream Recap",
+    thumbnail: "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=400&h=225&fit=crop",
+    duration: "2:15:30",
+    clips: 15,
+    date: "1 month ago",
+    status: "completed"
+  }
+];
+
+export default function Dashboard() {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Use cached hooks - ONLY Dashboard gets real-time updates for video processing status
+  const { data: videos = [], isLoading: loading, error: queryError } = useVideos({ realTime: true });
+  const { plan: userPlan = "Free", totalCredits = 60, creditsExpiryDate, isLoading: loadingCredits } = useUserPlan();
+
+  // Convert Firestore timestamp or ISO string to Date
+  const creditsExpiry = useMemo(() => {
+    if (!creditsExpiryDate) return null;
+
+    // Handle Firestore Timestamp
+    if (creditsExpiryDate?.toDate) {
+      return creditsExpiryDate.toDate();
+    }
+
+    // Handle ISO string from cache
+    if (typeof creditsExpiryDate === 'string') {
+      return new Date(creditsExpiryDate);
+    }
+
+    return null;
+  }, [creditsExpiryDate]);
+
+  // Set error from query if any
+  if (queryError && !error) {
+    setError("Failed to load videos. Please try again.");
+  }
+
+  // Notifications listener (keep this as it's separate from caching hooks)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const notificationsRef = collection(db, `users/${currentUser.uid}/notifications`);
+    const notifQuery = query(notificationsRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribeNotifications = onSnapshot(
+      notifQuery,
+      (snapshot) => {
+        const notificationsData: Notification[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Notification));
+
+        setNotifications(notificationsData);
+      },
+      (err) => {
+        console.error("Error fetching notifications:", err);
+      }
+    );
+
+    return () => unsubscribeNotifications();
+  }, [currentUser]);
+
+  // Calculate remaining credits - memoized for performance
+  const remainingCredits = useMemo(() => {
+    if (!videos || videos.length === 0 || totalCredits === 0) {
+      return totalCredits;
+    }
+
+    // Calculate used credits (sum of all video durations in minutes)
+    const usedCredits = videos.reduce((sum, video) => {
+      if (video.videoInfo?.duration) {
+        // Duration is in seconds, convert to minutes and round down
+        return sum + Math.floor(video.videoInfo.duration / 60);
+      }
+      return sum;
+    }, 0);
+
+    return Math.max(0, totalCredits - usedCredits);
+  }, [videos, totalCredits]);
+
+  const unreadNotifications = notifications.filter(n => !n.read).length;
+
+  // Calculate days until credits expire
+  const getDaysUntilExpiry = () => {
+    if (!creditsExpiry) return null;
+    const now = new Date();
+    const diffTime = creditsExpiry.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const daysUntilExpiry = getDaysUntilExpiry();
+
+  return (
+    <AppLayout>
+      <div className="p-6 md:p-8 space-y-6">
+        {/* Email Verification Banner */}
+        <EmailVerificationBanner />
+
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">My Projects</h1>
+            <p className="text-muted-foreground">Manage and edit your video projects</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Notifications */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="relative">
+                  <Bell className="h-5 w-5" />
+                  {unreadNotifications > 0 && (
+                    <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs">
+                      {unreadNotifications}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  <span>Notifications</span>
+                  {unreadNotifications > 0 && (
+                    <Badge variant="secondary">{unreadNotifications} new</Badge>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <ScrollArea className="h-[300px]">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No notifications yet
+                    </div>
+                  ) : (
+                    notifications.slice(0, 10).map((notif) => (
+                      <DropdownMenuItem
+                        key={notif.id}
+                        className={`flex flex-col items-start p-3 cursor-pointer ${
+                          !notif.read ? 'bg-primary/5' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-2 w-full">
+                          <div
+                            className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${
+                              notif.type === 'success'
+                                ? 'bg-green-500'
+                                : notif.type === 'error'
+                                ? 'bg-red-500'
+                                : notif.type === 'warning'
+                                ? 'bg-yellow-500'
+                                : 'bg-blue-500'
+                            }`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">{notif.title}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {notif.message}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {notif.createdAt?.toDate
+                                ? notif.createdAt.toDate().toLocaleString()
+                                : new Date(notif.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </ScrollArea>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Credits Display with Hover Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-1.5 px-3 py-2 h-auto hover:bg-accent"
+                >
+                  <Zap className="h-5 w-5 text-yellow-500 fill-yellow-500" />
+                  <span className="text-lg font-bold">
+                    {loadingCredits ? "..." : remainingCredits.toLocaleString()}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-0" align="end">
+                <div className="p-4 space-y-4">
+                  {/* Plan Info */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">{userPlan} Plan</span>
+                    <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/20">
+                      Active
+                    </Badge>
+                  </div>
+
+                  {/* Credits Info */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-muted-foreground">Credits</span>
+                      <div className="flex items-center gap-1.5">
+                        <Zap className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                        <span className="text-lg font-bold">
+                          {remainingCredits.toLocaleString()} / {totalCredits.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {remainingCredits} minutes remaining
+                    </p>
+                    {daysUntilExpiry !== null && (
+                      <p className="text-xs text-muted-foreground">
+                        Renews on {creditsExpiry?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => navigate('/billing')}
+                      className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
+                    >
+                      Add more credits
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        // TODO: Navigate to credits info page or open modal
+                        console.log("Learn how credits work");
+                      }}
+                    >
+                      Learn how credits work
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Add More Credits Button */}
+            <Button
+              onClick={() => navigate('/billing')}
+              size="lg"
+              className="gradient-primary shadow-medium"
+            >
+              {/* <Plus className="h-5 w-5 mr-2" /> */}
+              Add Credits
+            </Button>
+          </div>
+        </div>
+
+        {/* Upload Hero Section */}
+        <UploadHero />
+
+        {/* Stats Cards */}
+        {/* <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              label: "Total Videos",
+              value: loading ? "..." : videos.length.toString(),
+              change: `${videos.filter(v => v.status === 'completed').length} completed`
+            },
+            {
+              label: "Clips Generated",
+              value: loading ? "..." : videos.reduce((sum, v) => sum + (v.clips?.length || 0), 0).toString(),
+              change: "Total clips"
+            },
+            {
+              label: "Processing",
+              value: loading ? "..." : videos.filter(v => v.status === 'processing').length.toString(),
+              change: "Videos in queue"
+            },
+            {
+              label: "This Month",
+              value: loading ? "..." : videos.filter(v => {
+                if (!v.createdAt) return false;
+                const date = v.createdAt.toDate ? v.createdAt.toDate() : new Date(v.createdAt);
+                const now = new Date();
+                return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+              }).length.toString(),
+              change: "Videos processed"
+            }
+          ].map((stat) => (
+            <Card key={stat.label} className="shadow-soft border-border/50 hover:border-primary/20 transition-colors">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">{stat.label}</p>
+                <p className="text-2xl font-bold mb-1">{stat.value}</p>
+                <p className="text-xs text-muted-foreground">{stat.change}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div> */}
+
+        {/* Projects Grid */}
+        <div>
+          <h2 className="text-lg font-bold mb-3">Recent Projects</h2>
+
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : videos.length === 0 ? (
+            <Card className="shadow-soft">
+              <CardContent className="p-12 text-center">
+                <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold mb-2">No videos yet</h3>
+                <p className="text-muted-foreground mb-4">
+                  Upload your first video to start creating clips
+                </p>
+                <Link to="/upload">
+                  <Button className="gradient-primary">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Upload Video
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                {videos.slice(0, 8).map((video) => (
+                <Card
+                  key={video.id}
+                  className="group overflow-hidden shadow-soft hover:shadow-large transition-all duration-300 cursor-pointer border-border/50 hover:border-primary/30 rounded-xl"
+                  onClick={() => navigate(`/project/${video.sessionId}`)}
+                >
+                  <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-muted/50 to-muted">
+                    {/* Smart Thumbnail: YouTube for YT videos, first frame for uploads */}
+                    <VideoThumbnail
+                      // For YouTube videos: Use YouTube thumbnail
+                      youtubeUrl={video.youtubeUrl}
+                      youtubeThumbnail={video.videoInfo?.thumbnail}
+                      // For uploaded videos: Use first clip frame as fallback
+                      videoUrl={video.status === 'completed' && video.clips && video.clips.length > 0
+                        ? video.clips[0].downloadUrl
+                        : undefined}
+                      alt={video.videoInfo?.title || (video.projectName !== "Untitled Project" ? video.projectName : null) || `Video ${video.sessionId.substring(0, 8)}`}
+                      showPlayButton={true}
+                    />
+
+                    {/* Status Badge - Sleeker design */}
+                    <Badge
+                      className={`absolute top-3 right-3 z-10 text-xs font-semibold px-2.5 py-1 shadow-lg backdrop-blur-sm border ${
+                        video.status === 'completed'
+                          ? 'bg-green-500/90 border-green-400/50'
+                          : video.status === 'processing'
+                          ? 'bg-blue-500/90 border-blue-400/50'
+                          : video.status === 'failed'
+                          ? 'bg-red-500/90 border-red-400/50'
+                          : 'bg-gray-500/90 border-gray-400/50'
+                      } text-white`}
+                    >
+                      {video.status === 'completed'
+                        ? `${video.clips?.length || 0} ${video.clips?.length === 1 ? 'clip' : 'clips'}`
+                        : video.status}
+                    </Badge>
+                  </div>
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold text-sm mb-2 line-clamp-2 leading-snug group-hover:text-primary transition-colors min-h-[2.5rem]">
+                      {video.videoInfo?.title || (video.projectName !== "Untitled Project" ? video.projectName : null) || `Video ${video.sessionId.substring(0, 8)}`}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span className="font-medium">
+                        {video.createdAt?.toDate
+                          ? video.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : new Date(video.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
+
+                    {video.status === 'failed' && video.error && (
+                      <div className="mt-2.5 pt-2.5 border-t border-border/60">
+                        <p className="text-xs text-destructive line-clamp-2 font-medium">{video.error}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                ))}
+              </div>
+
+              {/* Show More Button - Sleeker design */}
+              {videos.length > 8 && (
+                <div className="flex justify-center mt-8">
+                  <Button
+                    onClick={() => navigate('/projects')}
+                    variant="outline"
+                    size="lg"
+                    className="gap-2 rounded-xl hover:bg-primary/5 hover:border-primary/40 hover:text-primary transition-all shadow-sm hover:shadow-md"
+                  >
+                    View All Projects ({videos.length})
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* FAQ Section */}
+        <FAQSection />
+      </div>
+    </AppLayout>
+  );
+}

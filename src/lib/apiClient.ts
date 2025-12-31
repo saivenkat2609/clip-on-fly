@@ -1,6 +1,11 @@
 /**
  * Centralized API Client with automatic Firebase JWT token injection
  * Handles authentication, token refresh, error handling, and caching for all backend API calls
+ *
+ * HIGH PRIORITY FIX #25: Added retry logic with exponential backoff
+ * - Automatically retries on 429 (Rate Limit) and 503 (Service Unavailable)
+ * - Exponential backoff: 1s, 2s, 4s between attempts
+ * - Max 3 attempts
  */
 
 import { auth } from './firebase';
@@ -31,8 +36,40 @@ class APIClient {
   }
 
   /**
+   * HIGH PRIORITY FIX #25: Exponential backoff delay
+   * @param attempt - Current attempt number (0-indexed)
+   * @returns Delay in milliseconds
+   */
+  private getRetryDelay(attempt: number): number {
+    // Exponential backoff: 1s, 2s, 4s
+    return Math.pow(2, attempt) * 1000;
+  }
+
+  /**
+   * HIGH PRIORITY FIX #25: Check if error is retryable
+   * @param status - HTTP status code
+   * @returns true if should retry
+   */
+  private isRetryableStatus(status: number): boolean {
+    return status === 429 || status === 503;
+  }
+
+  /**
+   * HIGH PRIORITY FIX #25: Sleep for exponential backoff
+   * @param ms - Milliseconds to sleep
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Get authentication headers with Firebase ID token
    * Automatically refreshes expired tokens
+   *
+   * HIGH PRIORITY FIX #13: Added CSRF protection via custom header
+   * While JWT-based APIs in Authorization headers are inherently CSRF-resistant
+   * (browsers don't auto-send them like cookies), we add X-Requested-With
+   * as defense-in-depth to prove the request came from our JavaScript app
    */
   private async getAuthHeaders(): Promise<Record<string, string>> {
     const user = auth.currentUser;
@@ -46,31 +83,61 @@ class APIClient {
     return {
       'Authorization': `Bearer ${idToken}`,
       'Content-Type': 'application/json',
+      // HIGH PRIORITY FIX #13: CSRF protection header
+      // Proves request originated from our JavaScript application, not a simple form
+      // Browsers prevent other sites from setting custom headers via simple requests
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-Client-Version': '1.0.0', // Additional verification - can be checked server-side
     };
   }
 
   /**
-   * Make a POST request to the API
+   * Make a POST request to the API with retry logic
+   * HIGH PRIORITY FIX #25: Automatically retries on 429 and 503 with exponential backoff
    */
   async post<T = any>(endpoint: string, body: any): Promise<T> {
-    try {
-      const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
+    const maxRetries = 3;
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || `API Error: ${response.status}`);
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
+
+        // HIGH PRIORITY FIX #25: Check if we should retry
+        if (this.isRetryableStatus(response.status) && attempt < maxRetries - 1) {
+          const delay = this.getRetryDelay(attempt);
+          console.warn(`[API Client] POST ${endpoint} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          // HIGH PRIORITY FIX #24: Sanitize error messages to avoid exposing internal details
+          const errorMessage = error.error || 'Request failed';
+          throw new Error(errorMessage);
+        }
+
+        return response.json();
+      } catch (error) {
+        // If it's a network error and we have retries left, retry
+        if (attempt < maxRetries - 1 && error instanceof TypeError) {
+          const delay = this.getRetryDelay(attempt);
+          console.warn(`[API Client] POST ${endpoint} network error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        console.error(`[API Client] POST ${endpoint} failed after ${attempt + 1} attempts:`, error);
+        throw error;
       }
-
-      return response.json();
-    } catch (error) {
-      console.error(`[API Client] POST ${endpoint} failed:`, error);
-      throw error;
     }
+
+    throw new Error(`POST ${endpoint} failed after ${maxRetries} attempts`);
   }
 
   /**
@@ -126,7 +193,8 @@ class APIClient {
   }
 
   /**
-   * Make a GET request to the API with caching and request deduplication
+   * Make a GET request to the API with caching, request deduplication, and retry logic
+   * HIGH PRIORITY FIX #25: Added retry logic with exponential backoff
    * @param endpoint - API endpoint
    * @param options - Cache options { ttl: cache TTL in ms, skipCache: skip cache }
    */
@@ -151,35 +219,61 @@ class APIClient {
       }
     }
 
-    // Make the request
+    // Make the request with retry logic
     const requestPromise = (async () => {
-      try {
-        const headers = await this.getAuthHeaders();
-        const response = await fetch(`${this.baseURL}${endpoint}`, {
-          method: 'GET',
-          headers,
-        });
+      const maxRetries = 3;
 
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.error || `API Error: ${response.status}`);
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const headers = await this.getAuthHeaders();
+          const response = await fetch(`${this.baseURL}${endpoint}`, {
+            method: 'GET',
+            headers,
+          });
+
+          // HIGH PRIORITY FIX #25: Check if we should retry
+          if (this.isRetryableStatus(response.status) && attempt < maxRetries - 1) {
+            const delay = this.getRetryDelay(attempt);
+            console.warn(`[API Client] GET ${endpoint} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+            await this.sleep(delay);
+            continue;
+          }
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            // HIGH PRIORITY FIX #24: Sanitize error messages
+            const errorMessage = error.error || 'Request failed';
+            throw new Error(errorMessage);
+          }
+
+          const data = await response.json();
+
+          // Cache the response
+          if (!skipCache) {
+            this.setCache(cacheKey, data);
+          }
+
+          return data;
+        } catch (error) {
+          // If it's a network error and we have retries left, retry
+          if (attempt < maxRetries - 1 && error instanceof TypeError) {
+            const delay = this.getRetryDelay(attempt);
+            console.warn(`[API Client] GET ${endpoint} network error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+            await this.sleep(delay);
+            continue;
+          }
+
+          console.error(`[API Client] GET ${endpoint} failed after ${attempt + 1} attempts:`, error);
+          throw error;
+        } finally {
+          // Remove from in-flight requests only on last attempt or success
+          if (attempt === maxRetries - 1) {
+            this.inFlightRequests.delete(cacheKey);
+          }
         }
-
-        const data = await response.json();
-
-        // Cache the response
-        if (!skipCache) {
-          this.setCache(cacheKey, data);
-        }
-
-        return data;
-      } catch (error) {
-        console.error(`[API Client] GET ${endpoint} failed:`, error);
-        throw error;
-      } finally {
-        // Remove from in-flight requests
-        this.inFlightRequests.delete(cacheKey);
       }
+
+      throw new Error(`GET ${endpoint} failed after ${maxRetries} attempts`);
     })();
 
     // Track in-flight request
@@ -210,50 +304,100 @@ class APIClient {
   }
 
   /**
-   * Make a PUT request to the API
+   * Make a PUT request to the API with retry logic
+   * HIGH PRIORITY FIX #25: Automatically retries on 429 and 503 with exponential backoff
    */
   async put<T = any>(endpoint: string, body: any): Promise<T> {
-    try {
-      const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(body),
-      });
+    const maxRetries = 3;
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || `API Error: ${response.status}`);
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(body),
+        });
+
+        // HIGH PRIORITY FIX #25: Check if we should retry
+        if (this.isRetryableStatus(response.status) && attempt < maxRetries - 1) {
+          const delay = this.getRetryDelay(attempt);
+          console.warn(`[API Client] PUT ${endpoint} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          // HIGH PRIORITY FIX #24: Sanitize error messages
+          const errorMessage = error.error || 'Request failed';
+          throw new Error(errorMessage);
+        }
+
+        return response.json();
+      } catch (error) {
+        // If it's a network error and we have retries left, retry
+        if (attempt < maxRetries - 1 && error instanceof TypeError) {
+          const delay = this.getRetryDelay(attempt);
+          console.warn(`[API Client] PUT ${endpoint} network error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        console.error(`[API Client] PUT ${endpoint} failed after ${attempt + 1} attempts:`, error);
+        throw error;
       }
-
-      return response.json();
-    } catch (error) {
-      console.error(`[API Client] PUT ${endpoint} failed:`, error);
-      throw error;
     }
+
+    throw new Error(`PUT ${endpoint} failed after ${maxRetries} attempts`);
   }
 
   /**
-   * Make a DELETE request to the API
+   * Make a DELETE request to the API with retry logic
+   * HIGH PRIORITY FIX #25: Automatically retries on 429 and 503 with exponential backoff
    */
   async delete<T = any>(endpoint: string): Promise<T> {
-    try {
-      const headers = await this.getAuthHeaders();
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
-        method: 'DELETE',
-        headers,
-      });
+    const maxRetries = 3;
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || `API Error: ${response.status}`);
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`${this.baseURL}${endpoint}`, {
+          method: 'DELETE',
+          headers,
+        });
+
+        // HIGH PRIORITY FIX #25: Check if we should retry
+        if (this.isRetryableStatus(response.status) && attempt < maxRetries - 1) {
+          const delay = this.getRetryDelay(attempt);
+          console.warn(`[API Client] DELETE ${endpoint} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          // HIGH PRIORITY FIX #24: Sanitize error messages
+          const errorMessage = error.error || 'Request failed';
+          throw new Error(errorMessage);
+        }
+
+        return response.json();
+      } catch (error) {
+        // If it's a network error and we have retries left, retry
+        if (attempt < maxRetries - 1 && error instanceof TypeError) {
+          const delay = this.getRetryDelay(attempt);
+          console.warn(`[API Client] DELETE ${endpoint} network error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await this.sleep(delay);
+          continue;
+        }
+
+        console.error(`[API Client] DELETE ${endpoint} failed after ${attempt + 1} attempts:`, error);
+        throw error;
       }
-
-      return response.json();
-    } catch (error) {
-      console.error(`[API Client] DELETE ${endpoint} failed:`, error);
-      throw error;
     }
+
+    throw new Error(`DELETE ${endpoint} failed after ${maxRetries} attempts`);
   }
 }
 

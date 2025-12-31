@@ -41,7 +41,7 @@ const queryClient = new QueryClient({
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <ThemeProvider defaultTheme="indigo" defaultMode="light">
+      <ThemeProvider defaultTheme="ocean" defaultMode="light">
         <TooltipProvider>
           <Toaster />
           <Sonner />

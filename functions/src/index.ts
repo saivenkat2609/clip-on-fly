@@ -4,6 +4,15 @@ import { google } from 'googleapis';
 import * as CryptoJS from 'crypto-js';
 import axios from 'axios';
 import { defineSecret } from "firebase-functions/params";
+import { RazorpayClient } from './razorpay/razorpayClient';
+import {
+  getRazorpayPlanId,
+  getPlanCredits,
+  getPlanFeatures,
+  PlanName,
+  BillingPeriod,
+  Currency,
+} from './razorpay/planMapping';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -16,6 +25,9 @@ const db = admin.firestore();
 const youtubeClientId = defineSecret("YOUTUBE_CLIENT_ID");
 const youtubeClientSecret = defineSecret("YOUTUBE_CLIENT_SECRET");
 const encryptionKey = defineSecret("ENCRYPTION_KEY");
+const razorpayKeyId = defineSecret("RAZORPAY_KEY_ID");
+const razorpayKeySecret = defineSecret("RAZORPAY_KEY_SECRET");
+const razorpayWebhookSecret = defineSecret("RAZORPAY_WEBHOOK_SECRET");
 
 // Encryption utilities
 function encryptToken(token: string, key: string): string {
@@ -432,3 +444,732 @@ export const getYouTubeConnections = functions.https.onCall(async (data, context
 
   return { connections };
 });
+
+// ============================================================================
+// RAZORPAY PAYMENT GATEWAY FUNCTIONS
+// ============================================================================
+
+/**
+ * Step 1: Create Razorpay Subscription
+ * Creates or retrieves customer and creates subscription in Razorpay
+ */
+export const createRazorpaySubscription = functions
+  .runWith({
+    secrets: [razorpayKeyId, razorpayKeySecret],
+    memory: '512MB',
+  })
+  .https.onCall(async (data, context) => {
+    // 1. Verify authentication
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+    const { planName, billingPeriod, currency } = data as {
+      planName: PlanName;
+      billingPeriod: BillingPeriod;
+      currency: Currency;
+    };
+
+    // 2. Validate input
+    if (!planName || !billingPeriod || !currency) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
+    }
+
+    if (planName === 'Free') {
+      throw new functions.https.HttpsError('invalid-argument', 'Cannot create subscription for Free plan');
+    }
+
+    // 3. Get user data
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+
+    if (!userData) {
+      throw new functions.https.HttpsError('not-found', 'User not found');
+    }
+
+    // 4. Initialize Razorpay client
+    const razorpayClient = new RazorpayClient(
+      razorpayKeyId.value(),
+      razorpayKeySecret.value(),
+      razorpayWebhookSecret.value()
+    );
+
+    try {
+      // 5. Create or get Razorpay customer
+      let customerId = userData?.razorpayCustomerId;
+      if (!customerId) {
+        const customer = await razorpayClient.createCustomer(
+          userData.email,
+          userData.displayName || 'User'
+        );
+        customerId = customer.id;
+
+        // Save customer ID
+        await db.collection('users').doc(userId).update({
+          razorpayCustomerId: customerId,
+        });
+      }
+
+      // 6. Get plan ID from mapping
+      const planId = getRazorpayPlanId(planName, billingPeriod, currency);
+
+      // 7. Create subscription
+      const subscription = await razorpayClient.createSubscription(
+        customerId,
+        planId,
+        {
+          notify_email: userData.email,
+        }
+      );
+
+      // 8. Save subscription to Firestore
+      const subscriptionData = {
+        razorpaySubscriptionId: subscription.id,
+        razorpayPlanId: planId,
+        razorpayCustomerId: customerId,
+        userId,
+        planName,
+        billingPeriod,
+        currency,
+        amount: subscription.plan.item.amount,
+        status: subscription.status,
+        totalCredits: getPlanCredits(planName),
+        creditsUsed: 0,
+        creditsRemaining: getPlanCredits(planName),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      await db
+        .collection('users')
+        .doc(userId)
+        .collection('subscriptions')
+        .doc(subscription.id)
+        .set(subscriptionData);
+
+      // 9. Return subscription details for frontend
+      return {
+        subscriptionId: subscription.id,
+        planId: subscription.plan_id,
+        status: subscription.status,
+        shortUrl: subscription.short_url,
+      };
+    } catch (error: any) {
+      console.error('Create subscription error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+/**
+ * Step 2: Verify Razorpay Payment & Activate Subscription
+ */
+export const verifyRazorpayPayment = functions
+  .runWith({
+    secrets: [razorpayKeyId, razorpayKeySecret],
+  })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+    const { razorpayPaymentId, razorpaySubscriptionId, razorpaySignature } = data;
+
+    if (!razorpayPaymentId || !razorpaySubscriptionId || !razorpaySignature) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing payment details');
+    }
+
+    // Verify signature (optional additional check)
+    const razorpayClient = new RazorpayClient(
+      razorpayKeyId.value(),
+      razorpayKeySecret.value(),
+      razorpayWebhookSecret.value()
+    );
+
+    try {
+      // Fetch subscription from Razorpay
+      const subscription = await razorpayClient.fetchSubscription(razorpaySubscriptionId);
+
+      if (subscription.status === 'active') {
+        // Update Firestore subscription
+        const subscriptionRef = db
+          .collection('users')
+          .doc(userId)
+          .collection('subscriptions')
+          .doc(razorpaySubscriptionId);
+
+        const subscriptionDoc = await subscriptionRef.get();
+        const subscriptionData = subscriptionDoc.data();
+
+        if (!subscriptionData) {
+          throw new functions.https.HttpsError('not-found', 'Subscription not found');
+        }
+
+        // Calculate billing cycle dates
+        await subscriptionRef.update({
+          status: 'active',
+          startedAt: admin.firestore.Timestamp.fromMillis(subscription.start_at * 1000),
+          currentStart: admin.firestore.Timestamp.fromMillis(subscription.current_start * 1000),
+          currentEnd: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+          nextBillingAt: admin.firestore.Timestamp.fromMillis(subscription.charge_at * 1000),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Update user profile
+        const planFeatures = getPlanFeatures(subscriptionData.planName);
+        await db.collection('users').doc(userId).update({
+          plan: subscriptionData.planName,
+          subscriptionStatus: 'active',
+          subscriptionId: razorpaySubscriptionId,
+          totalCredits: subscriptionData.totalCredits,
+          creditsUsed: 0,
+          creditsExpiryDate: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+          ...planFeatures,
+        });
+
+        // Create transaction record
+        await db
+          .collection('users')
+          .doc(userId)
+          .collection('transactions')
+          .add({
+            razorpayPaymentId,
+            razorpaySubscriptionId,
+            userId,
+            planName: subscriptionData.planName,
+            billingPeriod: subscriptionData.billingPeriod,
+            amount: subscriptionData.amount,
+            currency: subscriptionData.currency,
+            status: 'captured',
+            method: 'card',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            description: `${subscriptionData.planName} Plan - ${subscriptionData.billingPeriod}`,
+          });
+
+        return {
+          success: true,
+          status: 'active',
+          message: 'Subscription activated successfully',
+        };
+      }
+
+      return {
+        success: false,
+        status: subscription.status,
+        message: 'Payment verification pending',
+      };
+    } catch (error: any) {
+      console.error('Verify payment error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+/**
+ * Step 3: Cancel Razorpay Subscription
+ */
+export const cancelRazorpaySubscription = functions
+  .runWith({
+    secrets: [razorpayKeyId, razorpayKeySecret],
+  })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+    const { subscriptionId, cancelAtCycleEnd } = data;
+
+    if (!subscriptionId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing subscription ID');
+    }
+
+    const razorpayClient = new RazorpayClient(
+      razorpayKeyId.value(),
+      razorpayKeySecret.value(),
+      razorpayWebhookSecret.value()
+    );
+
+    try {
+      // Cancel in Razorpay
+      await razorpayClient.cancelSubscription(subscriptionId, cancelAtCycleEnd);
+
+      // Update Firestore
+      const subscriptionRef = db
+        .collection('users')
+        .doc(userId)
+        .collection('subscriptions')
+        .doc(subscriptionId);
+
+      await subscriptionRef.update({
+        status: cancelAtCycleEnd ? 'active' : 'cancelled',
+        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // Update user profile only if immediate cancellation
+      if (!cancelAtCycleEnd) {
+        const freeFeatures = getPlanFeatures('Free');
+        await db.collection('users').doc(userId).update({
+          plan: 'Free',
+          subscriptionStatus: 'cancelled',
+          totalCredits: getPlanCredits('Free'),
+          creditsUsed: 0,
+          ...freeFeatures,
+        });
+      }
+
+      return {
+        success: true,
+        message: cancelAtCycleEnd
+          ? 'Subscription will be cancelled at end of billing cycle'
+          : 'Subscription cancelled immediately',
+      };
+    } catch (error: any) {
+      console.error('Cancel subscription error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+/**
+ * Step 4: Track Video Usage
+ * Deducts credits when user processes a video
+ */
+export const trackVideoUsage = functions
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+    const { videoId, sessionId, durationSeconds } = data;
+
+    if (!videoId || !sessionId || !durationSeconds) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
+    }
+
+    const durationMinutes = Math.ceil(durationSeconds / 60);
+
+    try {
+      // Get user's current subscription
+      const userDoc = await db.collection('users').doc(userId).get();
+      const userData = userDoc.data();
+
+      if (!userData) {
+        throw new functions.https.HttpsError('not-found', 'User not found');
+      }
+
+      // Check if user has enough credits
+      const creditsUsed = userData.creditsUsed || 0;
+      const totalCredits = userData.totalCredits || getPlanCredits('Free');
+
+      if (creditsUsed + durationMinutes > totalCredits) {
+        throw new functions.https.HttpsError(
+          'resource-exhausted',
+          'Insufficient credits. Please upgrade your plan.'
+        );
+      }
+
+      // Update user credits
+      await db.collection('users').doc(userId).update({
+        creditsUsed: admin.firestore.FieldValue.increment(durationMinutes),
+      });
+
+      // Update usage tracking
+      const monthYear = new Date().toISOString().slice(0, 7);
+      const usageRef = db
+        .collection('users')
+        .doc(userId)
+        .collection('usage')
+        .doc(monthYear);
+
+      const usageDoc = await usageRef.get();
+
+      if (!usageDoc.exists) {
+        // Create new usage document
+        await usageRef.set({
+          userId,
+          monthYear,
+          subscriptionId: userData.subscriptionId || null,
+          planName: userData.plan || 'Free',
+          totalCredits,
+          videosProcessed: 1,
+          totalMinutesUsed: durationMinutes,
+          clipsGenerated: 0,
+          videos: [{
+            videoId,
+            sessionId,
+            minutesUsed: durationMinutes,
+            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }],
+          creditsRemaining: totalCredits - durationMinutes,
+          warningsSent: {
+            at75Percent: false,
+            at90Percent: false,
+            at100Percent: false,
+          },
+          periodStart: userData.currentStart || admin.firestore.FieldValue.serverTimestamp(),
+          periodEnd: userData.creditsExpiryDate || admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        // Update existing usage document
+        await usageRef.update({
+          videosProcessed: admin.firestore.FieldValue.increment(1),
+          totalMinutesUsed: admin.firestore.FieldValue.increment(durationMinutes),
+          videos: admin.firestore.FieldValue.arrayUnion({
+            videoId,
+            sessionId,
+            minutesUsed: durationMinutes,
+            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }),
+          creditsRemaining: admin.firestore.FieldValue.increment(-durationMinutes),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Check for usage warnings
+      const usagePercentage = ((creditsUsed + durationMinutes) / totalCredits) * 100;
+      const usageData = (await usageRef.get()).data();
+
+      if (usagePercentage >= 100 && !usageData?.warningsSent.at100Percent) {
+        // Send 100% usage notification
+        await usageRef.update({
+          'warningsSent.at100Percent': true,
+        });
+        // TODO: Send email/notification
+      } else if (usagePercentage >= 90 && !usageData?.warningsSent.at90Percent) {
+        await usageRef.update({
+          'warningsSent.at90Percent': true,
+        });
+        // TODO: Send email/notification
+      } else if (usagePercentage >= 75 && !usageData?.warningsSent.at75Percent) {
+        await usageRef.update({
+          'warningsSent.at75Percent': true,
+        });
+        // TODO: Send email/notification
+      }
+
+      return {
+        success: true,
+        creditsUsed: creditsUsed + durationMinutes,
+        creditsRemaining: totalCredits - (creditsUsed + durationMinutes),
+      };
+    } catch (error: any) {
+      console.error('Track usage error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+/**
+ * Step 5: Razorpay Webhook Handler
+ * Processes subscription events from Razorpay
+ */
+export const razorpayWebhook = functions
+  .runWith({
+    secrets: [razorpayWebhookSecret, razorpayKeyId, razorpayKeySecret],
+    memory: '512MB',
+  })
+  .https.onRequest(async (req, res) => {
+    // Only accept POST requests
+    if (req.method !== 'POST') {
+      res.status(405).send('Method Not Allowed');
+      return;
+    }
+
+    const signature = req.headers['x-razorpay-signature'] as string;
+    const payload = JSON.stringify(req.body);
+
+    const razorpayClient = new RazorpayClient(
+      razorpayKeyId.value(),
+      razorpayKeySecret.value(),
+      razorpayWebhookSecret.value()
+    );
+
+    // Verify webhook signature
+    if (!razorpayClient.verifyWebhookSignature(payload, signature)) {
+      console.error('Invalid webhook signature');
+      res.status(400).send('Invalid signature');
+      return;
+    }
+
+    const event = req.body.event;
+    const eventData = req.body.payload;
+
+    console.log('Razorpay webhook received:', event);
+
+    try {
+      switch (event) {
+        case 'subscription.activated':
+          await handleSubscriptionActivated(eventData.subscription.entity);
+          break;
+
+        case 'subscription.charged':
+          await handleSubscriptionCharged(eventData.payment.entity, eventData.subscription.entity);
+          break;
+
+        case 'subscription.cancelled':
+          await handleSubscriptionCancelled(eventData.subscription.entity);
+          break;
+
+        case 'subscription.completed':
+          await handleSubscriptionCompleted(eventData.subscription.entity);
+          break;
+
+        case 'subscription.halted':
+          await handleSubscriptionHalted(eventData.subscription.entity);
+          break;
+
+        case 'subscription.paused':
+          await handleSubscriptionPaused(eventData.subscription.entity);
+          break;
+
+        case 'subscription.resumed':
+          await handleSubscriptionResumed(eventData.subscription.entity);
+          break;
+
+        case 'payment.failed':
+          await handlePaymentFailed(eventData.payment.entity);
+          break;
+
+        default:
+          console.log('Unhandled webhook event:', event);
+      }
+
+      res.status(200).json({ status: 'success' });
+    } catch (error: any) {
+      console.error('Webhook processing error:', error);
+      res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  });
+
+/**
+ * Webhook event handlers
+ */
+async function handleSubscriptionActivated(subscription: any) {
+  const subscriptionsSnapshot = await db
+    .collectionGroup('subscriptions')
+    .where('razorpaySubscriptionId', '==', subscription.id)
+    .limit(1)
+    .get();
+
+  if (subscriptionsSnapshot.empty) {
+    console.error('Subscription not found:', subscription.id);
+    return;
+  }
+
+  const subscriptionDoc = subscriptionsSnapshot.docs[0];
+  const subscriptionData = subscriptionDoc.data();
+  const userId = subscriptionData.userId;
+
+  await subscriptionDoc.ref.update({
+    status: 'active',
+    startedAt: admin.firestore.Timestamp.fromMillis(subscription.start_at * 1000),
+    currentStart: admin.firestore.Timestamp.fromMillis(subscription.current_start * 1000),
+    currentEnd: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+    nextBillingAt: admin.firestore.Timestamp.fromMillis(subscription.charge_at * 1000),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  const planFeatures = getPlanFeatures(subscriptionData.planName);
+  await db.collection('users').doc(userId).update({
+    plan: subscriptionData.planName,
+    subscriptionStatus: 'active',
+    subscriptionId: subscription.id,
+    totalCredits: subscriptionData.totalCredits,
+    creditsExpiryDate: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+    ...planFeatures,
+  });
+
+  const monthYear = new Date().toISOString().slice(0, 7);
+  await db
+    .collection('users')
+    .doc(userId)
+    .collection('usage')
+    .doc(monthYear)
+    .set({
+      userId,
+      monthYear,
+      subscriptionId: subscription.id,
+      planName: subscriptionData.planName,
+      totalCredits: subscriptionData.totalCredits,
+      videosProcessed: 0,
+      totalMinutesUsed: 0,
+      clipsGenerated: 0,
+      videos: [],
+      creditsRemaining: subscriptionData.totalCredits,
+      warningsSent: {
+        at75Percent: false,
+        at90Percent: false,
+        at100Percent: false,
+      },
+      periodStart: admin.firestore.Timestamp.fromMillis(subscription.current_start * 1000),
+      periodEnd: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+}
+
+async function handleSubscriptionCharged(payment: any, subscription: any) {
+  const subscriptionsSnapshot = await db
+    .collectionGroup('subscriptions')
+    .where('razorpaySubscriptionId', '==', subscription.id)
+    .limit(1)
+    .get();
+
+  if (subscriptionsSnapshot.empty) return;
+
+  const subscriptionData = subscriptionsSnapshot.docs[0].data();
+  const userId = subscriptionData.userId;
+
+  await db
+    .collection('users')
+    .doc(userId)
+    .collection('transactions')
+    .add({
+      razorpayPaymentId: payment.id,
+      razorpaySubscriptionId: subscription.id,
+      razorpayInvoiceId: payment.invoice_id,
+      userId,
+      planName: subscriptionData.planName,
+      billingPeriod: subscriptionData.billingPeriod,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      method: payment.method,
+      cardLast4: payment.card?.last4,
+      cardNetwork: payment.card?.network,
+      paidAt: admin.firestore.Timestamp.fromMillis(payment.created_at * 1000),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      description: `${subscriptionData.planName} Plan - Renewal`,
+    });
+
+  await subscriptionsSnapshot.docs[0].ref.update({
+    currentStart: admin.firestore.Timestamp.fromMillis(subscription.current_start * 1000),
+    currentEnd: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+    nextBillingAt: admin.firestore.Timestamp.fromMillis(subscription.charge_at * 1000),
+    creditsUsed: 0,
+    creditsRemaining: subscriptionData.totalCredits,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await db.collection('users').doc(userId).update({
+    creditsUsed: 0,
+    creditsExpiryDate: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+  });
+}
+
+async function handleSubscriptionCancelled(subscription: any) {
+  const subscriptionsSnapshot = await db
+    .collectionGroup('subscriptions')
+    .where('razorpaySubscriptionId', '==', subscription.id)
+    .limit(1)
+    .get();
+
+  if (subscriptionsSnapshot.empty) return;
+
+  const subscriptionData = subscriptionsSnapshot.docs[0].data();
+  const userId = subscriptionData.userId;
+
+  await subscriptionsSnapshot.docs[0].ref.update({
+    status: 'cancelled',
+    cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  const freeFeatures = getPlanFeatures('Free');
+  await db.collection('users').doc(userId).update({
+    plan: 'Free',
+    subscriptionStatus: 'cancelled',
+    totalCredits: getPlanCredits('Free'),
+    ...freeFeatures,
+  });
+}
+
+async function handleSubscriptionCompleted(subscription: any) {
+  const subscriptionsSnapshot = await db
+    .collectionGroup('subscriptions')
+    .where('razorpaySubscriptionId', '==', subscription.id)
+    .limit(1)
+    .get();
+
+  if (subscriptionsSnapshot.empty) return;
+
+  await subscriptionsSnapshot.docs[0].ref.update({
+    status: 'completed',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+async function handleSubscriptionHalted(subscription: any) {
+  const subscriptionsSnapshot = await db
+    .collectionGroup('subscriptions')
+    .where('razorpaySubscriptionId', '==', subscription.id)
+    .limit(1)
+    .get();
+
+  if (subscriptionsSnapshot.empty) return;
+
+  const subscriptionData = subscriptionsSnapshot.docs[0].data();
+  const userId = subscriptionData.userId;
+
+  await subscriptionsSnapshot.docs[0].ref.update({
+    status: 'halted',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'halted',
+  });
+}
+
+async function handleSubscriptionPaused(subscription: any) {
+  const subscriptionsSnapshot = await db
+    .collectionGroup('subscriptions')
+    .where('razorpaySubscriptionId', '==', subscription.id)
+    .limit(1)
+    .get();
+
+  if (subscriptionsSnapshot.empty) return;
+
+  const subscriptionData = subscriptionsSnapshot.docs[0].data();
+  const userId = subscriptionData.userId;
+
+  await subscriptionsSnapshot.docs[0].ref.update({
+    status: 'paused',
+    pausedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'paused',
+  });
+}
+
+async function handleSubscriptionResumed(subscription: any) {
+  const subscriptionsSnapshot = await db
+    .collectionGroup('subscriptions')
+    .where('razorpaySubscriptionId', '==', subscription.id)
+    .limit(1)
+    .get();
+
+  if (subscriptionsSnapshot.empty) return;
+
+  const subscriptionData = subscriptionsSnapshot.docs[0].data();
+  const userId = subscriptionData.userId;
+
+  await subscriptionsSnapshot.docs[0].ref.update({
+    status: 'active',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await db.collection('users').doc(userId).update({
+    subscriptionStatus: 'active',
+  });
+}
+
+async function handlePaymentFailed(payment: any) {
+  console.error('Payment failed:', payment.id, payment.error_description);
+  // TODO: Send notification to user about failed payment
+}

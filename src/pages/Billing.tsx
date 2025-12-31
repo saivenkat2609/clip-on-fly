@@ -3,12 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, Zap, Calendar } from "lucide-react";
+import { Check, Zap, Calendar, Download } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserPlan } from "@/hooks/useUserProfile";
 import { useVideos } from "@/hooks/useVideos";
+import { useActiveSubscription, useCancelSubscription } from "@/hooks/useSubscription";
+import { useTransactions } from "@/hooks/useTransactions";
+import { PaymentModal } from "@/components/PaymentModal";
+import { UsageWarningBanner } from "@/components/UsageWarningBanner";
+import { getUserCurrency } from "@/lib/currencyDetector";
+import { PRICING, formatPrice, type Currency, type PlanName } from "@/lib/pricing";
+import { useToast } from "@/hooks/use-toast";
 
 interface VideoClip {
   clipIndex: number;
@@ -93,11 +100,23 @@ const plansData = [
 
 export default function Billing() {
   const { currentUser } = useAuth();
+  const { toast } = useToast();
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [currency, setCurrency] = useState<Currency>("USD");
+  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   // Use cached hooks
-  const { plan: userPlan = "Free", totalCredits = 60, creditsExpiryDate } = useUserPlan();
+  const { plan: userPlan = "Free", totalCredits = 60, creditsExpiryDate, subscriptionStatus } = useUserPlan();
   const { data: videos = [] } = useVideos();
+  const { data: activeSubscription } = useActiveSubscription();
+  const { data: transactions = [] } = useTransactions();
+  const cancelSubscription = useCancelSubscription();
+
+  // Auto-detect user currency on mount
+  useEffect(() => {
+    getUserCurrency().then(setCurrency);
+  }, []);
 
   // Convert Firestore timestamp or ISO string to Date
   const creditsExpiry = useMemo(() => {
@@ -140,23 +159,72 @@ export default function Billing() {
     };
   }, [videos]);
 
-  // Generate plans with current pricing based on billing period
-  const plans = plansData.map(plan => ({
-    ...plan,
-    price: plan.monthlyPrice === 0
-      ? "$0"
+  // Handle upgrade button click
+  const handleUpgrade = (plan: any) => {
+    if (plan.name === 'Free') {
+      // Free plan doesn't need payment
+      return;
+    }
+
+    setSelectedPlan(plan);
+    setIsPaymentModalOpen(true);
+  };
+
+  // Handle cancel subscription
+  const handleCancelSubscription = async () => {
+    if (!activeSubscription) return;
+
+    const confirmCancel = window.confirm(
+      'Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your billing cycle.'
+    );
+
+    if (confirmCancel) {
+      try {
+        await cancelSubscription.mutateAsync({
+          subscriptionId: activeSubscription.razorpaySubscriptionId,
+          cancelAtCycleEnd: true,
+        });
+
+        toast({
+          title: 'Subscription Cancelled',
+          description: 'Your subscription will be cancelled at the end of the billing period.',
+        });
+      } catch (error: any) {
+        toast({
+          title: 'Cancellation Failed',
+          description: error.message || 'Failed to cancel subscription. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    }
+  };
+
+  // Generate plans with current pricing based on billing period and currency
+  const plans = plansData.map(plan => {
+    const isCurrent = plan.name === userPlan;
+    const actualPrice = plan.monthlyPrice === 0
+      ? 0
       : billingPeriod === "monthly"
-        ? `$${plan.monthlyPrice}`
-        : `$${plan.yearlyPrice}`,
-    period: plan.monthlyPrice === 0
-      ? "/forever"
-      : billingPeriod === "monthly"
-        ? "/month"
-        : "/year",
-    savings: billingPeriod === "yearly" && plan.monthlyPrice > 0
-      ? Math.round(((plan.monthlyPrice * 12 - plan.yearlyPrice) / (plan.monthlyPrice * 12)) * 100)
-      : 0
-  }));
+        ? (PRICING[plan.name as Exclude<PlanName, 'Free'>]?.monthly[currency] || plan.monthlyPrice)
+        : (PRICING[plan.name as Exclude<PlanName, 'Free'>]?.yearly[currency] || plan.yearlyPrice);
+
+    return {
+      ...plan,
+      current: isCurrent,
+      price: plan.monthlyPrice === 0
+        ? "$0"
+        : formatPrice(actualPrice, currency),
+      period: plan.monthlyPrice === 0
+        ? "/forever"
+        : billingPeriod === "monthly"
+          ? "/month"
+          : "/year",
+      savings: billingPeriod === "yearly" && plan.monthlyPrice > 0
+        ? Math.round(((plan.monthlyPrice * 12 - plan.yearlyPrice) / (plan.monthlyPrice * 12)) * 100)
+        : 0,
+      actualAmount: actualPrice,
+    };
+  });
 
   return (
     <AppLayout>
@@ -166,6 +234,9 @@ export default function Billing() {
           <h1 className="text-3xl font-bold mb-2">Billing & Subscription</h1>
           <p className="text-muted-foreground">Manage your subscription and billing</p>
         </div>
+
+        {/* Usage Warning Banner */}
+        <UsageWarningBanner />
 
         {/* Current Usage */}
         <div className="grid md:grid-cols-3 gap-4">
@@ -250,9 +321,15 @@ export default function Billing() {
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" className="w-full">
-                    Update Payment Method
-                  </Button>
+                  {subscriptionStatus === 'active' && activeSubscription && (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleCancelSubscription}
+                    >
+                      Cancel Subscription
+                    </Button>
+                  )}
                 </>
               )}
             </CardContent>
@@ -263,19 +340,29 @@ export default function Billing() {
         <div id="available-plans">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
             <h2 className="text-2xl font-bold">Available Plans</h2>
-            <Tabs value={billingPeriod} onValueChange={(value) => setBillingPeriod(value as "monthly" | "yearly")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="monthly">
-                  Monthly
-                </TabsTrigger>
-                <TabsTrigger value="yearly" className="relative">
-                  Yearly
-                  <Badge className="ml-2 bg-green-500 text-white text-[10px] px-1.5 py-0">
-                    Save 20%
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex gap-4">
+              {/* Currency Toggle */}
+              <Tabs value={currency} onValueChange={(value) => setCurrency(value as Currency)}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="USD">USD ($)</TabsTrigger>
+                  <TabsTrigger value="INR">INR (₹)</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              {/* Billing Period Toggle */}
+              <Tabs value={billingPeriod} onValueChange={(value) => setBillingPeriod(value as "monthly" | "yearly")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="monthly">
+                    Monthly
+                  </TabsTrigger>
+                  <TabsTrigger value="yearly" className="relative">
+                    Yearly
+                    <Badge className="ml-2 bg-green-500 text-white text-[10px] px-1.5 py-0">
+                      Save 20%
+                    </Badge>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {plans.map((plan) => (
@@ -322,6 +409,7 @@ export default function Billing() {
                         : 'gradient-primary'
                     }`}
                     disabled={plan.current}
+                    onClick={() => handleUpgrade(plan)}
                   >
                     {plan.current ? 'Current Plan' : plan.name === 'Free' ? 'Get Started' : 'Upgrade'}
                   </Button>
@@ -345,35 +433,61 @@ export default function Billing() {
             <CardTitle>Billing History</CardTitle>
           </CardHeader>
           <CardContent>
-            {userPlan === "Free" ? (
+            {transactions.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground mb-4">No billing history yet</p>
                 <p className="text-sm text-muted-foreground">
-                  You're currently on the Free plan. Upgrade to access premium features.
+                  {userPlan === "Free"
+                    ? "You're currently on the Free plan. Upgrade to access premium features."
+                    : "Your transaction history will appear here once you make a payment."}
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
-                {[
-                  { date: "Nov 15, 2024", amount: "$79.00", status: "Paid", plan: "Professional" },
-                  { date: "Oct 15, 2024", amount: "$79.00", status: "Paid", plan: "Professional" },
-                  { date: "Sep 15, 2024", amount: "$29.00", status: "Paid", plan: "Starter" }
-                ].map((invoice, i) => (
+                {transactions.map((transaction) => (
                   <div
-                    key={i}
+                    key={transaction.id}
                     className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-smooth"
                   >
                     <div>
-                      <p className="font-medium">{invoice.date}</p>
-                      <p className="text-sm text-muted-foreground">{invoice.plan} Plan</p>
+                      <p className="font-medium">
+                        {transaction.paidAt
+                          ? new Date(transaction.paidAt.toDate()).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })
+                          : new Date(transaction.createdAt.toDate()).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{transaction.description}</p>
+                      {transaction.cardLast4 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {transaction.cardNetwork?.toUpperCase()} ****{transaction.cardLast4}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-4">
-                      <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20">
-                        {invoice.status}
+                      <Badge
+                        variant="outline"
+                        className={
+                          transaction.status === 'captured' || transaction.status === 'authorized'
+                            ? 'bg-green-500/10 text-green-600 border-green-500/20'
+                            : transaction.status === 'failed'
+                            ? 'bg-red-500/10 text-red-600 border-red-500/20'
+                            : 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20'
+                        }
+                      >
+                        {transaction.status === 'captured' ? 'Paid' : transaction.status}
                       </Badge>
-                      <p className="font-semibold">{invoice.amount}</p>
-                      <Button variant="ghost" size="sm">
-                        Download
+                      <p className="font-semibold">
+                        {formatPrice(transaction.amount / 100, transaction.currency)}
+                      </p>
+                      <Button variant="ghost" size="sm" disabled>
+                        <Download className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -383,6 +497,21 @@ export default function Billing() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Payment Modal */}
+      {selectedPlan && (
+        <PaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setSelectedPlan(null);
+          }}
+          planName={selectedPlan.name as PlanName}
+          billingPeriod={billingPeriod}
+          amount={selectedPlan.actualAmount}
+          currency={currency}
+        />
+      )}
     </AppLayout>
   );
 }

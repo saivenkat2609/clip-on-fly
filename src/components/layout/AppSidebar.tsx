@@ -1,4 +1,4 @@
-import { Home, Upload, Layout, CreditCard, Settings, Sparkles, LogOut, User } from "lucide-react";
+import { Home, Upload, Layout, CreditCard, Settings, Sparkles, LogOut, User, FolderOpen } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Upload", url: "/upload", icon: Upload },
+  { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Templates", url: "/templates", icon: Layout },
   { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -91,11 +92,11 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sidebar-foreground transition-all hover:bg-sidebar-accent hover:shadow-sm group"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold shadow-sm border border-primary/10"
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sidebar-foreground transition-all hover:bg-primary/10 hover:text-primary hover:shadow-md group"
+                      activeClassName="bg-primary/10 text-primary font-semibold shadow-sm border border-primary/20"
                     >
                       <item.icon className="h-5 w-5 transition-transform group-hover:scale-110" />
-                      {!isCollapsed && <span className="text-sm">{item.title}</span>}
+                      {!isCollapsed && <span className="text-sm font-medium">{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

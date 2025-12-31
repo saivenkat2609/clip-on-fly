@@ -18,6 +18,9 @@ async function sha1(message: string): Promise<string> {
 /**
  * Check if password has been found in data breaches
  * Returns true if password is compromised
+ *
+ * HIGH PRIORITY FIX #12: Changed to fail-closed for better security
+ * Throws error if breach check fails, preventing potentially compromised passwords
  */
 export async function checkPasswordBreached(password: string): Promise<boolean> {
   try {
@@ -35,9 +38,10 @@ export async function checkPasswordBreached(password: string): Promise<boolean> 
       }
     });
 
+    // HIGH PRIORITY FIX #12: Fail closed - throw error if API check fails
     if (!response.ok) {
-      console.error('Failed to check password breach status');
-      return false; // Fail open - don't block user if API is down
+      console.error('Failed to check password breach status:', response.status);
+      throw new Error('Unable to verify password security at this time. Please try again in a moment.');
     }
 
     const hashes = await response.text();
@@ -55,12 +59,19 @@ export async function checkPasswordBreached(password: string): Promise<boolean> 
     return false; // Password not found in breaches
   } catch (error) {
     console.error('Error checking password breach:', error);
-    return false; // Fail open - don't block user on error
+    // HIGH PRIORITY FIX #12: Fail closed - throw error instead of allowing compromised password
+    if (error instanceof Error && error.message.includes('Unable to verify password security')) {
+      throw error; // Re-throw our custom error message
+    }
+    throw new Error('Unable to verify password security. Please check your internet connection and try again.');
   }
 }
 
 /**
  * Check password with detailed information
+ *
+ * HIGH PRIORITY FIX #12: Changed to fail-closed for better security
+ * Throws error if breach check fails
  */
 export async function checkPasswordBreachedDetailed(password: string): Promise<{
   isBreached: boolean;
@@ -78,11 +89,9 @@ export async function checkPasswordBreachedDetailed(password: string): Promise<{
       }
     });
 
+    // HIGH PRIORITY FIX #12: Fail closed - throw error if API check fails
     if (!response.ok) {
-      return {
-        isBreached: false,
-        error: 'Could not verify password breach status'
-      };
+      throw new Error(`Unable to verify password security (Status: ${response.status}). Please try again.`);
     }
 
     const hashes = await response.text();
@@ -100,9 +109,7 @@ export async function checkPasswordBreachedDetailed(password: string): Promise<{
 
     return { isBreached: false };
   } catch (error) {
-    return {
-      isBreached: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    // HIGH PRIORITY FIX #12: Fail closed - throw error instead of returning safe result
+    throw new Error(error instanceof Error ? error.message : 'Unable to verify password security');
   }
 }

@@ -20,7 +20,7 @@ type ThemeProviderState = {
 };
 
 const initialState: ThemeProviderState = {
-  theme: "indigo",
+  theme: "ocean",
   mode: "light",
   setTheme: () => null,
   setMode: () => null,
@@ -30,14 +30,32 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 export function ThemeProvider({
   children,
-  defaultTheme = "indigo",
+  defaultTheme = "ocean",
   defaultMode = "light",
   ...props
 }: ThemeProviderProps) {
   const { currentUser } = useAuth();
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
-  const [mode, setMode] = useState<Mode>(defaultMode);
-  const [isLoadingTheme, setIsLoadingTheme] = useState(true);
+
+  // Get initial theme from localStorage (BEFORE Firestore) - instant load
+  const getInitialTheme = (): Theme => {
+    if (currentUser) {
+      const cached = localStorage.getItem(`theme_${currentUser.uid}`);
+      if (cached) return cached as Theme;
+    }
+    return defaultTheme;
+  };
+
+  const getInitialMode = (): Mode => {
+    if (currentUser) {
+      const cached = localStorage.getItem(`mode_${currentUser.uid}`);
+      if (cached) return cached as Mode;
+    }
+    return defaultMode;
+  };
+
+  const [theme, setTheme] = useState<Theme>(getInitialTheme());
+  const [mode, setMode] = useState<Mode>(getInitialMode());
+  const [isLoadingTheme, setIsLoadingTheme] = useState(false); // Start as false since we have cache
 
   // Clean up old global localStorage keys on mount (one-time migration)
   useEffect(() => {
@@ -51,9 +69,9 @@ export function ThemeProvider({
     }
   }, []);
 
-  // Load user's theme from Firestore when they sign in
+  // Sync with Firestore in background (non-blocking)
   useEffect(() => {
-    async function loadUserTheme() {
+    async function syncWithFirestore() {
       if (currentUser) {
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
@@ -61,38 +79,40 @@ export function ThemeProvider({
 
           if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
-            const userTheme = userData.theme as Theme || defaultTheme;
-            const userMode = userData.mode as Mode || defaultMode;
+            const firestoreTheme = userData.theme as Theme || defaultTheme;
+            const firestoreMode = userData.mode as Mode || defaultMode;
 
-            setTheme(userTheme);
-            setMode(userMode);
+            // Only update if different from cache
+            const cachedTheme = localStorage.getItem(`theme_${currentUser.uid}`);
+            const cachedMode = localStorage.getItem(`mode_${currentUser.uid}`);
 
-            // Store in user-specific localStorage
-            localStorage.setItem(`theme_${currentUser.uid}`, userTheme);
-            localStorage.setItem(`mode_${currentUser.uid}`, userMode);
+            if (firestoreTheme !== cachedTheme || firestoreMode !== cachedMode) {
+              // UI/UX FIX #95: Remove production logging
+              if (import.meta.env.DEV) {
+                console.log('[ThemeProvider] Firestore theme differs from cache - updating');
+              }
+              setTheme(firestoreTheme);
+              setMode(firestoreMode);
+              localStorage.setItem(`theme_${currentUser.uid}`, firestoreTheme);
+              localStorage.setItem(`mode_${currentUser.uid}`, firestoreMode);
+            } else {
+              if (import.meta.env.DEV) {
+                console.log('[ThemeProvider] Using cached theme (matches Firestore)');
+              }
+            }
           }
         } catch (error) {
-          console.error('Failed to load theme from Firestore:', error);
-          // Fall back to defaults
-          setTheme(defaultTheme);
-          setMode(defaultMode);
+          console.error('Failed to sync theme from Firestore:', error);
+          // Don't change current theme on error - keep using cached value
         }
       } else {
-        // User signed out - reset to defaults and clear user-specific storage
+        // User signed out - reset to defaults
         setTheme(defaultTheme);
         setMode(defaultMode);
-
-        // Clean up old localStorage entries for all users (keep only non-user-specific keys)
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith('theme_') || key.startsWith('mode_')) {
-            // Keep user-specific entries for future logins, but they won't be used
-          }
-        });
       }
-      setIsLoadingTheme(false);
     }
 
-    loadUserTheme();
+    syncWithFirestore();
   }, [currentUser, defaultTheme, defaultMode]);
 
   // Apply theme classes to document

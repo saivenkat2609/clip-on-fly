@@ -7,7 +7,7 @@ All colors MUST be HSL.
 */
 
 @layer base {
-  /* Default Indigo Theme */
+  /* Default Ocean (Blue) Theme - Lighter and more vibrant */
   :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 10%;
@@ -18,11 +18,11 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 10%;
 
-    --primary: 250 80% 60%;
+    --primary: 200 95% 55%;
     --primary-foreground: 0 0% 100%;
-    
-    --primary-light: 250 70% 70%;
-    --primary-dark: 250 90% 50%;
+
+    --primary-light: 200 90% 65%;
+    --primary-dark: 200 98% 48%;
 
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 10% 10%;
@@ -30,106 +30,106 @@ All colors MUST be HSL.
     --muted: 240 5% 96%;
     --muted-foreground: 240 4% 46%;
 
-    --accent: 35 100% 60%;
+    --accent: 200 95% 55%;
     --accent-foreground: 0 0% 100%;
-    
-    --accent-light: 35 100% 70%;
+
+    --accent-light: 200 90% 65%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 250 80% 60%;
+    --ring: 200 95% 55%;
 
     --radius: 0.75rem;
 
-    /* Sidebar - Light Mode (sleek light design) */
+    /* Sidebar - Light Mode (good contrast) */
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 240 10% 10%;
-    --sidebar-primary: 250 80% 60%;
+    --sidebar-primary: var(--primary);
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 250 80% 98%;
-    --sidebar-accent-foreground: 250 80% 40%;
+    --sidebar-accent: var(--primary-light);
+    --sidebar-accent-foreground: var(--primary-dark);
     --sidebar-border: 240 6% 90%;
-    --sidebar-ring: 250 80% 60%;
+    --sidebar-ring: var(--primary);
 
-    /* Custom design tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(250 80% 60%) 0%, hsl(280 70% 65%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(35 100% 60%) 0%, hsl(25 100% 55%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(250 80% 60%) 0%, hsl(280 70% 65%) 50%, hsl(35 100% 60%) 100%);
-    
+    /* Custom design tokens - Single consistent color */
+    --gradient-primary: linear-gradient(135deg, hsl(200 95% 55%) 0%, hsl(200 98% 48%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(200 95% 55%) 0%, hsl(200 90% 65%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(200 95% 55%) 0%, hsl(200 90% 60%) 50%, hsl(200 98% 48%) 100%);
+
     --shadow-soft: 0 2px 8px -2px hsl(240 10% 10% / 0.08);
     --shadow-medium: 0 4px 16px -4px hsl(240 10% 10% / 0.12);
     --shadow-large: 0 8px 32px -8px hsl(240 10% 10% / 0.16);
-    --shadow-glow: 0 0 32px hsl(250 80% 60% / 0.2);
+    --shadow-glow: 0 0 32px hsl(200 95% 55% / 0.25);
     
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Ocean Theme */
+  /* Ocean Theme - Single consistent blue color */
   .ocean {
-    --primary: 200 90% 50%;
-    --primary-light: 200 80% 60%;
-    --primary-dark: 200 95% 40%;
-    --accent: 180 100% 45%;
-    --accent-light: 180 90% 55%;
-    --gradient-primary: linear-gradient(135deg, hsl(200 90% 50%) 0%, hsl(220 80% 55%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(180 100% 45%) 0%, hsl(170 90% 40%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(200 90% 50%) 0%, hsl(220 80% 55%) 50%, hsl(180 100% 45%) 100%);
-    --shadow-glow: 0 0 32px hsl(200 90% 50% / 0.25);
+    --primary: 200 95% 55%;
+    --primary-light: 200 90% 65%;
+    --primary-dark: 200 98% 48%;
+    --accent: 200 95% 55%;
+    --accent-light: 200 90% 65%;
+    --gradient-primary: linear-gradient(135deg, hsl(200 95% 55%) 0%, hsl(200 98% 48%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(200 95% 55%) 0%, hsl(200 90% 65%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(200 95% 55%) 0%, hsl(200 90% 60%) 50%, hsl(200 98% 48%) 100%);
+    --shadow-glow: 0 0 32px hsl(200 95% 55% / 0.25);
   }
 
-  /* Sunset Theme */
+  /* Sunset Theme - Single orange color */
   .sunset {
-    --primary: 15 95% 60%;
-    --primary-light: 15 85% 70%;
-    --primary-dark: 15 100% 50%;
-    --accent: 340 100% 60%;
-    --accent-light: 340 90% 70%;
-    --gradient-primary: linear-gradient(135deg, hsl(15 95% 60%) 0%, hsl(340 100% 60%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(30 100% 60%) 0%, hsl(15 95% 55%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(15 95% 60%) 0%, hsl(340 100% 60%) 50%, hsl(30 100% 60%) 100%);
-    --shadow-glow: 0 0 32px hsl(15 95% 60% / 0.3);
+    --primary: 25 95% 60%;
+    --primary-light: 25 90% 70%;
+    --primary-dark: 25 98% 50%;
+    --accent: 25 95% 60%;
+    --accent-light: 25 90% 70%;
+    --gradient-primary: linear-gradient(135deg, hsl(25 95% 60%) 0%, hsl(25 98% 50%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(25 95% 60%) 0%, hsl(25 90% 70%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(25 95% 60%) 0%, hsl(25 92% 65%) 50%, hsl(25 98% 50%) 100%);
+    --shadow-glow: 0 0 32px hsl(25 95% 60% / 0.3);
   }
 
-  /* Forest Theme */
+  /* Forest Theme - Single green color */
   .forest {
-    --primary: 150 70% 45%;
-    --primary-light: 150 60% 55%;
-    --primary-dark: 150 80% 35%;
-    --accent: 80 100% 50%;
-    --accent-light: 80 90% 60%;
-    --gradient-primary: linear-gradient(135deg, hsl(150 70% 45%) 0%, hsl(130 65% 50%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(80 100% 50%) 0%, hsl(70 95% 45%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(150 70% 45%) 0%, hsl(130 65% 50%) 50%, hsl(80 100% 50%) 100%);
-    --shadow-glow: 0 0 32px hsl(150 70% 45% / 0.25);
+    --primary: 150 75% 50%;
+    --primary-light: 150 70% 60%;
+    --primary-dark: 150 80% 40%;
+    --accent: 150 75% 50%;
+    --accent-light: 150 70% 60%;
+    --gradient-primary: linear-gradient(135deg, hsl(150 75% 50%) 0%, hsl(150 80% 40%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(150 75% 50%) 0%, hsl(150 70% 60%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(150 75% 50%) 0%, hsl(150 72% 55%) 50%, hsl(150 80% 40%) 100%);
+    --shadow-glow: 0 0 32px hsl(150 75% 50% / 0.25);
   }
 
-  /* Cyber Theme */
+  /* Cyber Theme - Single purple color */
   .cyber {
-    --primary: 280 100% 60%;
-    --primary-light: 280 90% 70%;
-    --primary-dark: 280 100% 50%;
-    --accent: 170 100% 50%;
-    --accent-light: 170 90% 60%;
-    --gradient-primary: linear-gradient(135deg, hsl(280 100% 60%) 0%, hsl(300 90% 65%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(170 100% 50%) 0%, hsl(160 95% 45%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(280 100% 60%) 0%, hsl(300 90% 65%) 50%, hsl(170 100% 50%) 100%);
-    --shadow-glow: 0 0 32px hsl(280 100% 60% / 0.3);
+    --primary: 280 95% 65%;
+    --primary-light: 280 90% 75%;
+    --primary-dark: 280 98% 55%;
+    --accent: 280 95% 65%;
+    --accent-light: 280 90% 75%;
+    --gradient-primary: linear-gradient(135deg, hsl(280 95% 65%) 0%, hsl(280 98% 55%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(280 95% 65%) 0%, hsl(280 90% 75%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(280 95% 65%) 0%, hsl(280 92% 70%) 50%, hsl(280 98% 55%) 100%);
+    --shadow-glow: 0 0 32px hsl(280 95% 65% / 0.3);
   }
 
-  /* Rose Theme */
+  /* Rose Theme - Single pink color */
   .rose {
-    --primary: 330 80% 60%;
-    --primary-light: 330 70% 70%;
-    --primary-dark: 330 90% 50%;
-    --accent: 20 100% 65%;
-    --accent-light: 20 90% 75%;
-    --gradient-primary: linear-gradient(135deg, hsl(330 80% 60%) 0%, hsl(310 75% 65%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(20 100% 65%) 0%, hsl(10 95% 60%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(330 80% 60%) 0%, hsl(310 75% 65%) 50%, hsl(20 100% 65%) 100%);
-    --shadow-glow: 0 0 32px hsl(330 80% 60% / 0.25);
+    --primary: 330 85% 65%;
+    --primary-light: 330 80% 75%;
+    --primary-dark: 330 90% 55%;
+    --accent: 330 85% 65%;
+    --accent-light: 330 80% 75%;
+    --gradient-primary: linear-gradient(135deg, hsl(330 85% 65%) 0%, hsl(330 90% 55%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(330 85% 65%) 0%, hsl(330 80% 75%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(330 85% 65%) 0%, hsl(330 82% 70%) 50%, hsl(330 90% 55%) 100%);
+    --shadow-glow: 0 0 32px hsl(330 85% 65% / 0.25);
   }
 
   .dark {
@@ -157,12 +157,12 @@ All colors MUST be HSL.
     /* Sidebar - Dark Mode (sleek dark design) */
     --sidebar-background: 240 8% 10%;
     --sidebar-foreground: 240 5% 90%;
-    --sidebar-primary: 250 80% 60%;
+    --sidebar-primary: var(--primary);
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 8% 15%;
     --sidebar-accent-foreground: 240 5% 96%;
     --sidebar-border: 240 8% 18%;
-    --sidebar-ring: 250 80% 60%;
+    --sidebar-ring: var(--primary);
   }
 }
 

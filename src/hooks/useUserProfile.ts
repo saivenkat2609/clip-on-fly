@@ -11,20 +11,47 @@ export interface UserProfile {
   emailVerified: boolean;
   provider: string;
   providers: string[];
-  plan: string;
+
+  // Plan & Subscription
+  plan: 'Free' | 'Starter' | 'Professional';
+  subscriptionStatus?: 'none' | 'active' | 'cancelled' | 'expired' | 'paused' | 'halted';
+  subscriptionId?: string;
+  razorpayCustomerId?: string;
+  preferredCurrency?: 'INR' | 'USD';
+
+  // Credits & Usage
   totalCredits: number;
+  creditsUsed?: number;
   creditsExpiryDate: any;
+
+  // Plan Features
+  maxVideoLength?: number;
+  exportQuality?: '720p' | '1080p' | '4K';
+  hasWatermark?: boolean;
+  hasAIViralityScore?: boolean;
+  hasCustomBranding?: boolean;
+  hasSocialScheduler?: boolean;
+  hasAITitleGeneration?: boolean;
+  supportLevel?: 'community' | 'email' | 'priority';
+
+  // User Preferences
   theme: string;
   mode: string;
   company: string;
+
+  // Statistics
   totalVideos: number;
   totalClips: number;
   storageUsed: number;
+
+  // Notifications
   notifications: {
     processing: boolean;
     weekly: boolean;
     marketing: boolean;
   };
+
+  // Timestamps
   createdAt: any;
   lastLogin: any;
 }
@@ -105,8 +132,10 @@ export function useUserProfile() {
       return data;
     },
     enabled: !!userId,
-    staleTime: Infinity, // Never consider data stale
-    gcTime: Infinity, // Keep in cache forever (until browser close)
+    // HIGH PRIORITY FIX #18: Changed from Infinity to reasonable TTLs
+    // This allows profile changes (plan upgrades, subscription changes) to reflect automatically
+    staleTime: 5 * 60 * 1000, // 5 minutes - data considered fresh for 5 min, then refetches in background
+    gcTime: 10 * 60 * 1000, // 10 minutes - cached data retained for 10 min after becoming unused
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchOnReconnect: false,
