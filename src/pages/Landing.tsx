@@ -167,7 +167,7 @@ export default function Landing() {
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
                 <Sparkles className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold">ClipForge</span>
+              <span className="text-xl font-bold">NebulaAI</span>
             </div>
             <div className="flex items-center gap-4">
               <Link to="/login">
@@ -366,7 +366,7 @@ export default function Landing() {
                 Ready to Transform Your Content?
               </h2>
               <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
-                Join thousands of creators who are already making viral content with ClipForge
+                Join thousands of creators who are already making viral content with NebulaAI
               </p>
               <Link to="/login">
                 <Button size="lg" variant="secondary" className="text-lg h-14 px-8">

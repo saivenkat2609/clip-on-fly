@@ -57,7 +57,7 @@ export function PaymentModal({
       await openRazorpayCheckout({
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         subscription_id: subscriptionData.subscriptionId,
-        name: 'Reframe AI',
+        name: 'NebulaAI',
         description: `${planName} Plan - ${billingPeriod}`,
         handler: async (response) => {
           // Step 3: Verify payment on backend

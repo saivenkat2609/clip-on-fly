@@ -299,7 +299,7 @@ export default function Login() {
       await signUp(signupEmail, signupPassword);
       toast({
         title: 'Account created successfully!',
-        description: 'Welcome to ClipForge! A verification email has been sent to your inbox.',
+        description: 'Welcome to NebulaAI! A verification email has been sent to your inbox.',
       });
       navigate(from, { replace: true });
     } catch (error: any) {
@@ -399,7 +399,7 @@ export default function Login() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">ClipForge</span>
+            <span className="text-xl font-bold">NebulaAI</span>
           </Link>
         </div>
       </nav>
