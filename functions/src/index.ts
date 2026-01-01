@@ -499,7 +499,7 @@ export const createRazorpaySubscription = functions
       // 5. Create or get Razorpay customer
       let customerId = userData?.razorpayCustomerId;
       if (!customerId) {
-        const customer = await razorpayClient.createCustomer(
+        const customer: any = await razorpayClient.createCustomer(
           userData.email,
           userData.displayName || 'User'
         );
@@ -515,7 +515,7 @@ export const createRazorpaySubscription = functions
       const planId = getRazorpayPlanId(planName, billingPeriod, currency);
 
       // 7. Create subscription
-      const subscription = await razorpayClient.createSubscription(
+      const subscription: any = await razorpayClient.createSubscription(
         customerId,
         planId,
         {
@@ -532,7 +532,7 @@ export const createRazorpaySubscription = functions
         planName,
         billingPeriod,
         currency,
-        amount: subscription.plan.item.amount,
+        amount: subscription.plan?.item?.amount || 0,
         status: subscription.status,
         totalCredits: getPlanCredits(planName),
         creditsUsed: 0,
@@ -609,10 +609,10 @@ export const verifyRazorpayPayment = functions
         // Calculate billing cycle dates
         await subscriptionRef.update({
           status: 'active',
-          startedAt: admin.firestore.Timestamp.fromMillis(subscription.start_at * 1000),
-          currentStart: admin.firestore.Timestamp.fromMillis(subscription.current_start * 1000),
-          currentEnd: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
-          nextBillingAt: admin.firestore.Timestamp.fromMillis(subscription.charge_at * 1000),
+          startedAt: subscription.start_at ? admin.firestore.Timestamp.fromMillis(subscription.start_at * 1000) : null,
+          currentStart: subscription.current_start ? admin.firestore.Timestamp.fromMillis(subscription.current_start * 1000) : null,
+          currentEnd: subscription.current_end ? admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000) : null,
+          nextBillingAt: subscription.charge_at ? admin.firestore.Timestamp.fromMillis(subscription.charge_at * 1000) : null,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
@@ -624,7 +624,7 @@ export const verifyRazorpayPayment = functions
           subscriptionId: razorpaySubscriptionId,
           totalCredits: subscriptionData.totalCredits,
           creditsUsed: 0,
-          creditsExpiryDate: admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000),
+          creditsExpiryDate: subscription.current_end ? admin.firestore.Timestamp.fromMillis(subscription.current_end * 1000) : null,
           ...planFeatures,
         });
 
