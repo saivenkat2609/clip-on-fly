@@ -92,12 +92,33 @@ async function requestReauth(action: string): Promise<boolean> {
 }
 
 /**
- * Prompt user for password (should be implemented with a modal)
- * This is a placeholder - actual implementation should use a React modal
+ * HIGH PRIORITY FIX #23: Password prompt placeholder
+ *
+ * NOTE: This function is no longer used directly.
+ * Instead, use the useReauth() hook from '@/hooks/useReauth'
+ *
+ * Example usage in a React component:
+ *
+ *   import { useReauth } from '@/hooks/useReauth';
+ *
+ *   function MyComponent() {
+ *     const { requestReauth } = useReauth();
+ *
+ *     async function handleSensitiveAction() {
+ *       const confirmed = await requestReauth('delete your account');
+ *       if (confirmed) {
+ *         // Proceed with action
+ *       }
+ *     }
+ *   }
+ *
+ * This function remains for backward compatibility but returns null.
  */
 async function promptForPassword(action: string): Promise<string | null> {
-  // In real implementation, this would show a modal dialog
-  // For now, we'll return null to indicate cancellation
+  console.warn(
+    '[SessionManager] promptForPassword is deprecated. ' +
+    'Use useReauth() hook instead. See function documentation for usage.'
+  );
   console.log(`Re-authentication required for: ${action}`);
   return null;
 }

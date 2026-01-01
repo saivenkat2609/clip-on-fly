@@ -1,4 +1,4 @@
-// Template System for Reframe AI
+// Template System for NebulaAI
 // This file contains all template definitions and styling properties
 
 export interface TemplateStyle {

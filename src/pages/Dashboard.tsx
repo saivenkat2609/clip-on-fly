@@ -15,6 +15,8 @@ import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase
 import { db } from "@/lib/firebase";
 import { useVideos } from "@/hooks/useVideos";
 import { useUserPlan } from "@/hooks/useUserProfile";
+import { useVideoStatus } from "@/hooks/useWebSocket";
+import { useRemainingCredits } from "@/hooks/useRemainingCredits";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +32,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Zap } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { containerVariants, itemVariants, fadeInVariants, shakeVariants } from "@/lib/animations";
+import { AnimatedCounter } from "@/components/AnimatedCounter";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface VideoClip {
   clipIndex: number;
@@ -141,6 +147,29 @@ export default function Dashboard() {
   const { data: videos = [], isLoading: loading, error: queryError } = useVideos({ realTime: true });
   const { plan: userPlan = "Free", totalCredits = 60, creditsExpiryDate, isLoading: loadingCredits } = useUserPlan();
 
+  // Get processing videos for WebSocket connection
+  const processingVideos = useMemo(
+    () => videos.filter(v => v.status === 'processing' || v.status === 'pending'),
+    [videos]
+  );
+
+  // WebSocket for real-time Lambda updates
+  const { isConnected, status: wsStatus, progress: wsProgress } = useVideoStatus({
+    sessionId: processingVideos[0]?.sessionId || '',
+    enabled: import.meta.env.VITE_ENABLE_WEBSOCKET === 'true' && processingVideos.length > 0,
+    onProgress: (data) => {
+      console.log('📡 Processing progress:', data);
+      // Firestore listener will automatically pick up status updates
+    },
+    onComplete: (data) => {
+      console.log('✅ Processing complete:', data);
+      // Firestore listener will automatically refresh the video
+    },
+    onError: (data) => {
+      console.error('❌ Processing error:', data);
+    }
+  });
+
   // Convert Firestore timestamp or ISO string to Date
   const creditsExpiry = useMemo(() => {
     if (!creditsExpiryDate) return null;
@@ -188,23 +217,8 @@ export default function Dashboard() {
     return () => unsubscribeNotifications();
   }, [currentUser]);
 
-  // Calculate remaining credits - memoized for performance
-  const remainingCredits = useMemo(() => {
-    if (!videos || videos.length === 0 || totalCredits === 0) {
-      return totalCredits;
-    }
-
-    // Calculate used credits (sum of all video durations in minutes)
-    const usedCredits = videos.reduce((sum, video) => {
-      if (video.videoInfo?.duration) {
-        // Duration is in seconds, convert to minutes and round down
-        return sum + Math.floor(video.videoInfo.duration / 60);
-      }
-      return sum;
-    }, 0);
-
-    return Math.max(0, totalCredits - usedCredits);
-  }, [videos, totalCredits]);
+  // Use shared hook for credits calculation
+  const remainingCredits = useRemainingCredits();
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
@@ -226,18 +240,43 @@ export default function Dashboard() {
         <EmailVerificationBanner />
 
         {/* Error Alert */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+        <AnimatePresence mode="wait">
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+              variants={shakeVariants}
+              transition={{ duration: 0.3 }}
+            >
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">My Projects</h1>
-            <p className="text-muted-foreground">Manage and edit your video projects</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">My Projects</h1>
+              <p className="text-muted-foreground">Manage and edit your video projects</p>
+            </div>
+            {/* Live Connection Indicator */}
+            {import.meta.env.VITE_ENABLE_WEBSOCKET === 'true' && processingVideos.length > 0 && (
+              <Badge
+                variant={isConnected ? "default" : "secondary"}
+                className={`${
+                  isConnected
+                    ? 'bg-green-500/10 text-green-600 border-green-500/30'
+                    : 'bg-gray-500/10 text-gray-600 border-gray-500/30'
+                } ml-2`}
+              >
+                {isConnected ? '🟢 Live' : '🔴 Offline'}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {/* Notifications */}
@@ -313,7 +352,7 @@ export default function Dashboard() {
                 >
                   <Zap className="h-5 w-5 text-yellow-500 fill-yellow-500" />
                   <span className="text-lg font-bold">
-                    {loadingCredits ? "..." : remainingCredits.toLocaleString()}
+                    {loadingCredits ? "..." : <AnimatedCounter value={remainingCredits} duration={0.8} />}
                   </span>
                 </Button>
               </PopoverTrigger>
@@ -352,7 +391,7 @@ export default function Dashboard() {
                   <div className="space-y-2">
                     <Button
                       onClick={() => navigate('/billing')}
-                      className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white"
+                      className="w-full gradient-primary"
                     >
                       Add more credits
                     </Button>
@@ -430,9 +469,21 @@ export default function Dashboard() {
           <h2 className="text-lg font-bold mb-3">Recent Projects</h2>
 
           {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5"
+            >
+              {[...Array(8)].map((_, i) => (
+                <Card key={i} className="overflow-hidden">
+                  <Skeleton className="aspect-video w-full" />
+                  <CardContent className="p-4 space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </CardContent>
+                </Card>
+              ))}
+            </motion.div>
           ) : videos.length === 0 ? (
             <Card className="shadow-soft">
               <CardContent className="p-12 text-center">
@@ -451,13 +502,24 @@ export default function Dashboard() {
             </Card>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                {videos.slice(0, 8).map((video) => (
-                <Card
+              <motion.div
+                className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5"
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+              >
+                {videos.slice(0, 8).map((video, index) => (
+                <motion.div
                   key={video.id}
-                  className="group overflow-hidden shadow-soft hover:shadow-large transition-all duration-300 cursor-pointer border-border/50 hover:border-primary/30 rounded-xl"
-                  onClick={() => navigate(`/project/${video.sessionId}`)}
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.02, y: -5 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 >
+                  <Card
+                    className="group overflow-hidden shadow-soft hover:shadow-large transition-shadow duration-300 cursor-pointer border-border/50 hover:border-primary/30 rounded-xl h-full"
+                    onClick={() => navigate(`/project/${video.sessionId}`)}
+                  >
                   <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-muted/50 to-muted">
                     {/* Smart Thumbnail: YouTube for YT videos, first frame for uploads */}
                     <VideoThumbnail
@@ -509,12 +571,18 @@ export default function Dashboard() {
                     )}
                   </CardContent>
                 </Card>
+                </motion.div>
                 ))}
-              </div>
+              </motion.div>
 
               {/* Show More Button - Sleeker design */}
               {videos.length > 8 && (
-                <div className="flex justify-center mt-8">
+                <motion.div
+                  className="flex justify-center mt-8"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5, duration: 0.3 }}
+                >
                   <Button
                     onClick={() => navigate('/projects')}
                     variant="outline"
@@ -523,7 +591,7 @@ export default function Dashboard() {
                   >
                     View All Projects ({videos.length})
                   </Button>
-                </div>
+                </motion.div>
               )}
             </>
           )}

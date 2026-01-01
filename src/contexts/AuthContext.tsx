@@ -21,7 +21,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
-import { validateEmailStrictGmailOnly } from '@/lib/emailValidator';
+import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
 import { useToast } from '@/hooks/use-toast';
 import {
   ActivityTracker,
@@ -101,8 +101,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   async function signUp(email: string, password: string) {
-    // STRICT validation - only Gmail addresses allowed
-    const validation = validateEmailStrictGmailOnly(email);
+    // HIGH PRIORITY FIX #11: Validate all email providers, not just Gmail
+    const validation = validateEmail(email);
     if (!validation.isValid) {
       throw new Error(validation.error);
     }
@@ -166,7 +166,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
           company: '',
           plan: 'Free',
           totalCredits: 60, // Total credits per month for Free plan
+          creditsUsed: 0,
           creditsExpiryDate: creditsExpiryDate,
+          subscriptionStatus: 'none',
+          subscriptionId: null,
+          razorpayCustomerId: null,
+          preferredCurrency: null, // Will be auto-detected on billing page
+          // Free plan features
+          maxVideoLength: 900, // 15 minutes in seconds
+          exportQuality: '720p',
+          hasWatermark: true,
+          hasAIViralityScore: false,
+          hasCustomBranding: false,
+          hasPriorityProcessing: false,
+          hasAPIAccess: false,
           theme: 'indigo',
           mode: 'light',
           notifications: {
@@ -283,7 +296,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
           company: '',
           plan: 'Free',
           totalCredits: 60, // Total credits per month for Free plan
+          creditsUsed: 0,
           creditsExpiryDate: creditsExpiryDate,
+          subscriptionStatus: 'none',
+          subscriptionId: null,
+          razorpayCustomerId: null,
+          preferredCurrency: null, // Will be auto-detected on billing page
+          // Free plan features
+          maxVideoLength: 900, // 15 minutes in seconds
+          exportQuality: '720p',
+          hasWatermark: true,
+          hasAIViralityScore: false,
+          hasCustomBranding: false,
+          hasPriorityProcessing: false,
+          hasAPIAccess: false,
           theme: 'indigo',
           mode: 'light',
           notifications: {
@@ -342,8 +368,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   async function resetPassword(email: string) {
-    // Validate email format
-    const validation = validateEmailStrictGmailOnly(email);
+    // HIGH PRIORITY FIX #11: Validate all email providers, not just Gmail
+    const validation = validateEmail(email);
     if (!validation.isValid) {
       throw new Error(validation.error);
     }
@@ -361,8 +387,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error('No user is currently signed in');
     }
 
-    // Validate new email
-    const validation = validateEmailStrictGmailOnly(newEmail);
+    // HIGH PRIORITY FIX #11: Validate all email providers, not just Gmail
+    const validation = validateEmail(newEmail);
     if (!validation.isValid) {
       throw new Error(validation.error);
     }
@@ -626,7 +652,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const inactiveTime = activityTracker.current.getInactiveTime();
 
-      // Show warning 5 minutes before auto-logout
+      // UI/UX FIX #85: Show warning 5 minutes before auto-logout with extension option
       if (inactiveTime > INACTIVITY_TIMEOUT - INACTIVITY_WARNING_TIME &&
           inactiveTime < INACTIVITY_TIMEOUT) {
         if (!showInactivityWarning) {
@@ -635,6 +661,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
           toast({
             title: 'Inactivity Warning',
             description: `You will be automatically signed out in ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''} due to inactivity.`,
+            action: {
+              label: 'Extend Session',
+              onClick: () => {
+                // Reset last activity to extend session
+                updateLastActivity();
+                setShowInactivityWarning(false);
+                toast({
+                  title: 'Session Extended',
+                  description: 'Your session has been extended for another 30 minutes.',
+                  duration: 3000,
+                });
+              },
+            },
             duration: 10000,
           });
         }

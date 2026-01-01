@@ -992,7 +992,7 @@ export default function Settings() {
                 <div className="p-4 rounded-lg bg-muted/50 border border-border">
                   <h4 className="font-semibold mb-2">API Documentation</h4>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Learn how to integrate ClipForge into your workflow
+                    Learn how to integrate NebulaAI into your workflow
                   </p>
                   <Button variant="outline" size="sm">
                     View Documentation

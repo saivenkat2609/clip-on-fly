@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChevronDown, HelpCircle, Zap, Video, Download, Clock } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface FAQItem {
   id: number;
@@ -44,59 +45,91 @@ export function FAQSection() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 rounded-lg bg-primary/10">
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="flex items-start gap-4 pb-2">
+        <div className="p-3 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
           <HelpCircle className="h-6 w-6 text-primary" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold">Frequently Asked Questions</h2>
-          <p className="text-sm text-muted-foreground">Everything you need to know about creating clips</p>
+          <h2 className="text-2xl font-bold text-foreground">Frequently Asked Questions</h2>
+          <p className="text-sm text-muted-foreground mt-1">Everything you need to know about creating clips</p>
         </div>
       </div>
 
+      {/* FAQ Items */}
       <div className="space-y-3">
-        {faqs.map((faq) => (
-          <Card
+        {faqs.map((faq, index) => (
+          <motion.div
             key={faq.id}
-            className={`cursor-pointer transition-all duration-300 border-border/50 hover:border-primary/30 shadow-soft ${
-              openId === faq.id ? "shadow-medium border-primary/50" : ""
-            }`}
-            onClick={() => toggleFAQ(faq.id)}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: index * 0.1 }}
           >
-            <CardContent className="p-5">
-              <div className="flex items-start gap-3">
-                <div className={`p-2.5 rounded-lg transition-colors flex-shrink-0 ${
-                  openId === faq.id
-                    ? "bg-primary/15 text-primary"
-                    : "bg-muted text-muted-foreground"
-                }`}>
-                  {faq.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="font-semibold text-sm leading-snug pr-2">
-                      {faq.question}
-                    </h3>
-                    <ChevronDown
-                      className={`h-5 w-5 text-muted-foreground transition-transform duration-300 flex-shrink-0 ${
-                        openId === faq.id ? "rotate-180 text-primary" : ""
-                      }`}
-                    />
-                  </div>
-                  <div
-                    className={`overflow-hidden transition-all duration-300 ${
-                      openId === faq.id ? "max-h-40 opacity-100" : "max-h-0 opacity-0"
+            <Card
+              className={`cursor-pointer transition-all duration-300 border hover:shadow-md ${
+                openId === faq.id
+                  ? "shadow-md border-primary/50 bg-primary/5"
+                  : "border-border/50 hover:border-primary/30"
+              }`}
+              onClick={() => toggleFAQ(faq.id)}
+            >
+              <CardContent className="p-5">
+                <div className="flex items-center gap-4">
+                  {/* Icon */}
+                  <motion.div
+                    className={`p-3 rounded-lg transition-all duration-300 flex-shrink-0 ${
+                      openId === faq.id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-muted/50 text-muted-foreground"
                     }`}
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   >
-                    <p className="text-sm text-muted-foreground leading-relaxed pt-1">
-                      {faq.answer}
-                    </p>
+                    {faq.icon}
+                  </motion.div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-semibold text-base text-foreground">
+                        {faq.question}
+                      </h3>
+                      <motion.div
+                        animate={{ rotate: openId === faq.id ? 180 : 0 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                      >
+                        <ChevronDown
+                          className={`h-5 w-5 flex-shrink-0 ${
+                            openId === faq.id
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                      </motion.div>
+                    </div>
+
+                    {/* Answer */}
+                    <AnimatePresence initial={false}>
+                      {openId === faq.id && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: "easeInOut" }}
+                          className="overflow-hidden"
+                        >
+                          <p className="text-sm text-muted-foreground leading-relaxed pt-3">
+                            {faq.answer}
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
       </div>
 

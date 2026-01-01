@@ -2,14 +2,18 @@ import * as React from "react";
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
-const TOAST_LIMIT = 1;
+const TOAST_LIMIT = 3; // UI/UX FIX #88: Increased from 1 to 3 for better UX
 const TOAST_REMOVE_DELAY = 1000000;
+
+// UI/UX FIX #88: Priority levels for toast queue
+type ToastPriority = 'low' | 'normal' | 'high';
 
 type ToasterToast = ToastProps & {
   id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;
+  priority?: ToastPriority; // UI/UX FIX #88: Added priority
 };
 
 const actionTypes = {
@@ -50,7 +54,20 @@ interface State {
   toasts: ToasterToast[];
 }
 
+// UI/UX FIX #88: Toast queue for overflow handling
+let toastQueue: ToasterToast[] = [];
+
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
+// UI/UX FIX #88: Sort toasts by priority (high > normal > low)
+const sortByPriority = (toasts: ToasterToast[]): ToasterToast[] => {
+  const priorityOrder = { high: 0, normal: 1, low: 2 };
+  return [...toasts].sort((a, b) => {
+    const aPriority = priorityOrder[a.priority || 'normal'];
+    const bPriority = priorityOrder[b.priority || 'normal'];
+    return aPriority - bPriority;
+  });
+};
 
 const addToRemoveQueue = (toastId: string) => {
   if (toastTimeouts.has(toastId)) {
@@ -71,9 +88,19 @@ const addToRemoveQueue = (toastId: string) => {
 export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "ADD_TOAST":
+      // UI/UX FIX #88: Queue management with priority
+      if (state.toasts.length >= TOAST_LIMIT) {
+        // Add to queue instead of showing immediately
+        toastQueue.push(action.toast);
+        toastQueue = sortByPriority(toastQueue);
+        return state;
+      }
+
+      // Add toast and sort by priority
+      const newToasts = sortByPriority([action.toast, ...state.toasts]).slice(0, TOAST_LIMIT);
       return {
         ...state,
-        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+        toasts: newToasts,
       };
 
     case "UPDATE_TOAST":
@@ -109,14 +136,29 @@ export const reducer = (state: State, action: Action): State => {
     }
     case "REMOVE_TOAST":
       if (action.toastId === undefined) {
+        // UI/UX FIX #88: Clear queue when all toasts removed
+        toastQueue = [];
         return {
           ...state,
           toasts: [],
         };
       }
+
+      // Remove the toast
+      const filteredToasts = state.toasts.filter((t) => t.id !== action.toastId);
+
+      // UI/UX FIX #88: Show next toast from queue if available
+      if (toastQueue.length > 0 && filteredToasts.length < TOAST_LIMIT) {
+        const nextToast = toastQueue.shift()!;
+        return {
+          ...state,
+          toasts: sortByPriority([...filteredToasts, nextToast]).slice(0, TOAST_LIMIT),
+        };
+      }
+
       return {
         ...state,
-        toasts: state.toasts.filter((t) => t.id !== action.toastId),
+        toasts: filteredToasts,
       };
   }
 };

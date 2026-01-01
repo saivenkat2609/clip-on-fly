@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,21 @@ export function EmailVerificationBanner() {
   const { currentUser, resendVerificationEmail, refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+
+  // UI/UX FIX #86: Poll verification status every 30 seconds
+  useEffect(() => {
+    if (!currentUser || currentUser.emailVerified) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await refreshUser();
+      } catch (error) {
+        console.error('Failed to refresh user verification status:', error);
+      }
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [currentUser, refreshUser]);
 
   // Don't show banner if user is verified or signed in with Google
   if (!currentUser || currentUser.emailVerified) {

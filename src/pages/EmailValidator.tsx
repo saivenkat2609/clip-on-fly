@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sparkles, Mail, CheckCircle2, XCircle, Info, AlertTriangle } from 'lucide-react';
 import {
-  validateEmailStrictGmailOnly,
+  validateEmail,  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
   isDisposableEmail,
   getEmailDomain,
   hasEmailAlias,
@@ -38,8 +38,8 @@ export default function EmailValidator() {
       return;
     }
 
-    // Perform STRICT validation - only Gmail allowed
-    const validation = validateEmailStrictGmailOnly(email);
+    // HIGH PRIORITY FIX #11: Validate all email providers, not just Gmail
+    const validation = validateEmail(email);
     const domain = getEmailDomain(email);
     const disposable = isDisposableEmail(email);
     const hasAlias = hasEmailAlias(email);
@@ -72,7 +72,7 @@ export default function EmailValidator() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">ClipForge</span>
+            <span className="text-xl font-bold">NebulaAI</span>
           </Link>
         </div>
       </nav>

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Mail, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
-import { validateEmailStrictGmailOnly } from '@/lib/emailValidator';
+import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -28,7 +28,8 @@ export default function ForgotPassword() {
       return;
     }
 
-    const validation = validateEmailStrictGmailOnly(email);
+    // HIGH PRIORITY FIX #11: Validate all email providers, not just Gmail
+    const validation = validateEmail(email);
     if (!validation.isValid) {
       setError(validation.error || 'Invalid email');
       return;
@@ -60,7 +61,7 @@ export default function ForgotPassword() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">ClipForge</span>
+            <span className="text-xl font-bold">NebulaAI</span>
           </Link>
         </div>
       </nav>

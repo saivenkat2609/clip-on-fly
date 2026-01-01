@@ -56,9 +56,9 @@ export default function Editor() {
             <Card className="mb-6 shadow-large">
               <CardContent className="p-0">
                 <div className="relative aspect-video bg-black rounded-t-lg overflow-hidden">
-                  <img 
-                    src="https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=800&h=450&fit=crop" 
-                    alt="Video preview"
+                  <img
+                    src="https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=800&h=450&fit=crop"
+                    alt="Video preview thumbnail showing the current frame of the Marketing Webinar Highlights video"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -74,7 +74,7 @@ export default function Editor() {
                 {/* Video Controls */}
                 <div className="p-4 space-y-3">
                   <div className="flex items-center gap-4">
-                    <Button size="sm" variant="ghost">
+                    <Button size="sm" variant="ghost" aria-label="Play video">
                       <Play className="h-4 w-4" />
                     </Button>
                     <div className="flex-1">
@@ -86,10 +86,10 @@ export default function Editor() {
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <Button size="sm" variant="ghost">
+                      <Button size="sm" variant="ghost" aria-label="Adjust volume">
                         <Volume2 className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="ghost">
+                      <Button size="sm" variant="ghost" aria-label="Toggle fullscreen">
                         <Maximize className="h-4 w-4" />
                       </Button>
                     </div>

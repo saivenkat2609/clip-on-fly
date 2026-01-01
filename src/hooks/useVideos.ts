@@ -101,9 +101,30 @@ export function useVideos(options?: {
     return () => unsubscribe();
   }, [userId, realTime, queryClient]);
 
+  // Get cached data synchronously for initialData
+  const getCachedData = (): Video[] | undefined => {
+    if (!userId) return undefined;
+
+    try {
+      const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < SESSION_CACHE_TTL) {
+          console.log('[useVideos] Using cached data from sessionStorage');
+          return data as Video[];
+        }
+      }
+    } catch (error) {
+      console.error('Failed to read cached videos:', error);
+    }
+
+    return undefined;
+  };
+
   // Query configuration with aggressive caching
   const videoQuery = useQuery({
     queryKey,
+    initialData: getCachedData(), // CRITICAL: Populate immediately with cache
     queryFn: async () => {
       if (!userId) return [];
 
@@ -111,8 +132,9 @@ export function useVideos(options?: {
       try {
         const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
         if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
+          const { data, timestamp} = JSON.parse(cached);
           if (Date.now() - timestamp < SESSION_CACHE_TTL) {
+            console.log('[useVideos] Returning cached data from queryFn');
             return data as Video[];
           }
         }
@@ -121,6 +143,7 @@ export function useVideos(options?: {
       }
 
       // Only fetch from Firestore if cache miss
+      console.log('[useVideos] Cache miss - fetching from Firestore');
       const videosRef = collection(db, `users/${userId}/videos`);
       const firestoreQuery = query(videosRef, orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(firestoreQuery);

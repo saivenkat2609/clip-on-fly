@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Mail, Lock, Chrome, AlertCircle, CheckCircle2, Info } from 'lucide-react';
-import { validateEmailStrictGmailOnly } from '@/lib/emailValidator';
+import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
 import { fetchSignInMethodsForEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { PasswordInput } from '@/components/PasswordInput';
@@ -23,7 +23,32 @@ export default function Login() {
 
   // Remember Me and failed login tracking
   const [rememberMe, setRememberMe] = useState(true);
-  const [failedLoginAttempts, setFailedLoginAttempts] = useState(0);
+
+  // UI/UX FIX #91: Persistent failed login tracking (survives page refresh)
+  const [failedLoginAttempts, setFailedLoginAttempts] = useState(() => {
+    try {
+      const stored = localStorage.getItem('failedLoginAttempts');
+      const data = stored ? JSON.parse(stored) : { count: 0, timestamp: Date.now() };
+      // Reset if older than 1 hour
+      if (Date.now() - data.timestamp > 3600000) {
+        localStorage.removeItem('failedLoginAttempts');
+        return 0;
+      }
+      return data.count;
+    } catch {
+      return 0;
+    }
+  });
+
+  // Helper to update failed attempts in both state and localStorage
+  const updateFailedAttempts = useCallback((count: number) => {
+    setFailedLoginAttempts(count);
+    if (count === 0) {
+      localStorage.removeItem('failedLoginAttempts');
+    } else {
+      localStorage.setItem('failedLoginAttempts', JSON.stringify({ count, timestamp: Date.now() }));
+    }
+  }, []);
 
   // Provider conflict state (for MongoDB Atlas style prompts)
   const [providerConflict, setProviderConflict] = useState<{
@@ -68,30 +93,10 @@ export default function Login() {
     setIsPasswordBreached(false);
   }, [isSignUp]);
 
-  // Real-time email validation for signup
-  const handleSignupEmailChange = async (email: string) => {
-    setSignupEmail(email);
-    setSignupErrors(prev => ({ ...prev, email: '' }));
+  // UI/UX FIX #90: Debounced email API check
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    if (!email || email.length < 3) {
-      setEmailValidationStatus('idle');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setEmailValidationStatus('idle');
-      return;
-    }
-
-    // STRICT validation - only Gmail allowed
-    const validation = validateEmailStrictGmailOnly(email);
-    if (!validation.isValid) {
-      setEmailValidationStatus('invalid');
-      setSignupErrors(prev => ({ ...prev, email: validation.error || '' }));
-      return;
-    }
-
+  const checkEmailExists = useCallback(async (email: string) => {
     // Check if email already exists
     try {
       const signInMethods = await fetchSignInMethodsForEmail(auth, email);
@@ -118,6 +123,41 @@ export default function Login() {
       // If check fails, just show as valid (will be caught during signup)
       setEmailValidationStatus('valid');
     }
+  }, []);
+
+  // Real-time email validation for signup with debouncing
+  const handleSignupEmailChange = async (email: string) => {
+    setSignupEmail(email);
+    setSignupErrors(prev => ({ ...prev, email: '' }));
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    if (!email || email.length < 3) {
+      setEmailValidationStatus('idle');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailValidationStatus('idle');
+      return;
+    }
+
+    // HIGH PRIORITY FIX #11: Validate all email providers, not just Gmail
+    const validation = validateEmail(email);
+    if (!validation.isValid) {
+      setEmailValidationStatus('invalid');
+      setSignupErrors(prev => ({ ...prev, email: validation.error || '' }));
+      return;
+    }
+
+    // UI/UX FIX #90: Debounce API call by 500ms
+    debounceTimerRef.current = setTimeout(() => {
+      checkEmailExists(email);
+    }, 500);
   };
 
   // Validate login form
@@ -154,7 +194,8 @@ export default function Login() {
       errors.email = 'Email is required';
       isValid = false;
     } else {
-      const validation = validateEmailStrictGmailOnly(signupEmail);
+      // HIGH PRIORITY FIX #11: Validate all email providers, not just Gmail
+      const validation = validateEmail(signupEmail);
       if (!validation.isValid) {
         errors.email = validation.error || 'Invalid email';
         isValid = false;
@@ -196,7 +237,7 @@ export default function Login() {
       await signIn(loginEmail, loginPassword);
 
       // Reset failed attempts on successful login
-      setFailedLoginAttempts(0);
+      updateFailedAttempts(0);
 
       toast({
         title: 'Welcome back!',
@@ -219,7 +260,7 @@ export default function Login() {
       } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         // Track failed attempts
         const newAttempts = failedLoginAttempts + 1;
-        setFailedLoginAttempts(newAttempts);
+        updateFailedAttempts(newAttempts);
 
         setLoginErrors(prev => ({
           ...prev,
@@ -258,7 +299,7 @@ export default function Login() {
       await signUp(signupEmail, signupPassword);
       toast({
         title: 'Account created successfully!',
-        description: 'Welcome to ClipForge! A verification email has been sent to your inbox.',
+        description: 'Welcome to NebulaAI! A verification email has been sent to your inbox.',
       });
       navigate(from, { replace: true });
     } catch (error: any) {
@@ -358,7 +399,7 @@ export default function Login() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">ClipForge</span>
+            <span className="text-xl font-bold">NebulaAI</span>
           </Link>
         </div>
       </nav>
@@ -502,8 +543,14 @@ export default function Login() {
                       placeholder="••••••••"
                       value={signupConfirmPassword}
                       onChange={(e) => {
-                        setSignupConfirmPassword(e.target.value);
-                        setSignupErrors(prev => ({ ...prev, confirmPassword: '' }));
+                        const value = e.target.value;
+                        setSignupConfirmPassword(value);
+                        // UI/UX FIX #87: Real-time password match feedback
+                        if (value && signupPassword && value !== signupPassword) {
+                          setSignupErrors(prev => ({ ...prev, confirmPassword: "Passwords don't match" }));
+                        } else {
+                          setSignupErrors(prev => ({ ...prev, confirmPassword: '' }));
+                        }
                       }}
                       disabled={loading}
                       className="pl-10"

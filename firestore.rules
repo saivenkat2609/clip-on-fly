@@ -13,6 +13,39 @@ service cloud.firestore {
           allow update: if request.auth != null && request.auth.uid == userId;
           allow delete: if request.auth != null && request.auth.uid == userId;
         }
+
+        // Subscription data - Read-only for users, write-only via backend
+        match /subscriptions/{subscriptionId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          // Write operations only through Cloud Functions (Admin SDK bypasses rules)
+          allow write: if false;
+        }
+
+        // Transaction records - Read-only for users, write-only via backend
+        match /transactions/{transactionId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          // Write operations only through Cloud Functions (Admin SDK bypasses rules)
+          allow write: if false;
+        }
+
+        // Usage tracking - Read-only for users, write-only via backend
+        match /usage/{usageId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          // Write operations only through Cloud Functions (Admin SDK bypasses rules)
+          allow write: if false;
+        }
+
+        // Login history - Read-only for users
+        match /loginHistory/{loginId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          allow write: if false;
+        }
+
+        // Account linking history - Read-only for users
+        match /accountLinkingHistory/{linkingId} {
+          allow read: if request.auth != null && request.auth.uid == userId;
+          allow write: if false;
+        }
       }
 
     // Social media connections
