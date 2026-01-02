@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
@@ -20,9 +21,9 @@ import { YouTubeConnection } from "@/components/YouTubeConnection";
 import { SignInMethodCard } from "@/components/SignInMethodCard";
 import { PasswordInput } from "@/components/PasswordInput";
 import { cn } from "@/lib/utils";
-import { doc, updateDoc } from "firebase/firestore";
-import { updateProfile } from "firebase/auth";
-import { db } from "@/lib/firebase";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { updateProfile, fetchSignInMethodsForEmail } from "firebase/auth";
+import { db, auth } from "@/lib/firebase";
 import { useUserProfile, refreshUserProfile } from "@/hooks/useUserProfile";
 
 export default function Settings() {
@@ -43,8 +44,7 @@ export default function Settings() {
   // Profile information state
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [company, setCompany] = useState('');
-  const [initialProfileData, setInitialProfileData] = useState({ firstName: '', lastName: '', company: '' });
+  const [initialProfileData, setInitialProfileData] = useState({ firstName: '', lastName: '' });
   const [profileLoading, setProfileLoading] = useState(false);
 
   // Email change state
@@ -57,6 +57,10 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [isNewPasswordBreached, setIsNewPasswordBreached] = useState(false);
+
+  // Provider detection state
+  const [hasPasswordProvider, setHasPasswordProvider] = useState(false);
 
   // Email verification state
   const [verificationLoading, setVerificationLoading] = useState(false);
@@ -68,6 +72,13 @@ export default function Settings() {
   const [newAccountConfirmPassword, setNewAccountConfirmPassword] = useState('');
   const [addPasswordError, setAddPasswordError] = useState('');
 
+  // Unlink provider confirmation dialog state
+  const [unlinkDialog, setUnlinkDialog] = useState<{
+    open: boolean;
+    providerId: 'google.com' | 'password' | null;
+    providerName: string;
+  }>({ open: false, providerId: null, providerName: '' });
+
   // Use cached user profile hook
   const { data: profile, isLoading: profileDataLoading } = useUserProfile();
 
@@ -78,21 +89,34 @@ export default function Settings() {
       const names = displayName.split(' ');
       const fName = names[0] || '';
       const lName = names.length > 1 ? names[names.length - 1] : '';
-      const comp = profile.company || '';
 
       setFirstName(fName);
       setLastName(lName);
-      setCompany(comp);
-      setInitialProfileData({ firstName: fName, lastName: lName, company: comp });
+      setInitialProfileData({ firstName: fName, lastName: lName });
     }
   }, [profile, currentUser]);
+
+  // Load provider information
+  useEffect(() => {
+    async function loadProviderInfo() {
+      if (currentUser?.email) {
+        try {
+          const signInMethods = await fetchSignInMethodsForEmail(auth, currentUser.email);
+          setHasPasswordProvider(signInMethods.includes('password'));
+        } catch (error) {
+          console.error('Failed to load provider info:', error);
+        }
+      }
+    }
+
+    loadProviderInfo();
+  }, [currentUser]);
 
   // Check if profile data has changed
   const hasProfileChanged = () => {
     return (
       firstName !== initialProfileData.firstName ||
-      lastName !== initialProfileData.lastName ||
-      company !== initialProfileData.company
+      lastName !== initialProfileData.lastName
     );
   };
 
@@ -145,8 +169,7 @@ export default function Settings() {
       // Update Firestore profile
       const userDocRef = doc(db, 'users', currentUser.uid);
       await updateDoc(userDocRef, {
-        displayName: displayName,
-        company: company.trim()
+        displayName: displayName
       });
 
       // Update Firebase Auth profile (displayName)
@@ -157,18 +180,15 @@ export default function Settings() {
       // Normalize values
       const normalizedFirstName = firstName.trim();
       const normalizedLastName = lastName.trim();
-      const normalizedCompany = company.trim();
 
       // Update local state to reflect saved changes
       setFirstName(normalizedFirstName);
       setLastName(normalizedLastName);
-      setCompany(normalizedCompany);
 
       // Update initial data to disable save/cancel buttons
       setInitialProfileData({
         firstName: normalizedFirstName,
-        lastName: normalizedLastName,
-        company: normalizedCompany
+        lastName: normalizedLastName
       });
 
       // Invalidate profile cache to refetch updated data
@@ -188,7 +208,6 @@ export default function Settings() {
     // Reset form to initial values
     setFirstName(initialProfileData.firstName);
     setLastName(initialProfileData.lastName);
-    setCompany(initialProfileData.company);
     toast.info('Changes discarded');
   };
 
@@ -239,6 +258,43 @@ export default function Settings() {
       toast.success('Password updated successfully!');
     } catch (error: any) {
       toast.error(error.message || 'Failed to update password');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleSetBackupPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!currentUser) {
+      toast.error('No user is currently signed in');
+      return;
+    }
+
+    if (!newPassword || !confirmNewPassword) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await linkPasswordProvider(newPassword);
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setHasPasswordProvider(true);
+      toast.success('Backup password set successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to set backup password');
     } finally {
       setPasswordLoading(false);
     }
@@ -301,25 +357,44 @@ export default function Settings() {
     }
   };
 
-  const handleUnlinkProvider = async (providerId: 'google.com' | 'password') => {
-    const providerName = providerId === 'google.com' ? 'Google' : 'password';
+  const handleUnlinkProvider = (providerId: 'google.com' | 'password') => {
+    const providerName = providerId === 'google.com' ? 'Google' : 'Email & Password';
+    setUnlinkDialog({ open: true, providerId, providerName });
+  };
 
-    if (!window.confirm(`Are you sure you want to unlink ${providerName}? You will no longer be able to sign in with this method.`)) {
-      return;
-    }
+  const confirmUnlinkProvider = async () => {
+    if (!unlinkDialog.providerId) return;
 
     setLinkingLoading(true);
     try {
-      await unlinkProvider(providerId);
+      await unlinkProvider(unlinkDialog.providerId);
+      toast.success(`${unlinkDialog.providerName} unlinked successfully`);
+      setUnlinkDialog({ open: false, providerId: null, providerName: '' });
     } catch (error: any) {
-      toast.error(error.message || `Failed to unlink ${providerName}`);
+      toast.error(error.message || `Failed to unlink ${unlinkDialog.providerName}`);
     } finally {
       setLinkingLoading(false);
     }
   };
 
+  const handleScrollToPasswordSection = () => {
+    const passwordSection = document.getElementById('password-section');
+    if (passwordSection) {
+      passwordSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Add a brief highlight effect
+      passwordSection.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+      setTimeout(() => {
+        passwordSection.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
+      }, 2000);
+    }
+  };
+
   const isGoogleUser = currentUser?.providerData.some(provider => provider.providerId === 'google.com');
   const linkedProviders = getLinkedProviders();
+
+  // Check if only one method is connected (to disable unlink button)
+  const connectedMethodsCount = (linkedProviders.google ? 1 : 0) + (linkedProviders.password ? 1 : 0);
+  const hasOnlyOneMethod = connectedMethodsCount === 1;
 
   const themes = [
     {
@@ -388,18 +463,6 @@ export default function Settings() {
             <TabsTrigger value="social">
               <Share2 className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Social</span>
-            </TabsTrigger>
-            <TabsTrigger value="notifications">
-              <Bell className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Notifications</span>
-            </TabsTrigger>
-            <TabsTrigger value="api">
-              <Key className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">API</span>
-            </TabsTrigger>
-            <TabsTrigger value="team">
-              <Users className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Team</span>
             </TabsTrigger>
           </TabsList>
 
@@ -610,18 +673,6 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  <div>
-                    <Label htmlFor="company">Company</Label>
-                    <Input
-                      id="company"
-                      value={company}
-                      onChange={(e) => setCompany(e.target.value)}
-                      placeholder="Your company name"
-                      disabled={profileLoading}
-                      className="mt-2"
-                    />
-                  </div>
-
                   <div className="flex justify-end gap-3 pt-4 border-t border-border">
                     <Button
                       type="button"
@@ -718,22 +769,87 @@ export default function Settings() {
             </Card>
 
             {/* Password Change */}
-            <Card className="shadow-medium">
+            <Card id="password-section" className="shadow-medium transition-all duration-300">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Lock className="h-5 w-5" />
-                  Change Password
+                  {!linkedProviders.password ? 'Set Backup Password' : 'Change Password'}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {isGoogleUser ? (
-                  <Alert>
-                    <Shield className="h-4 w-4" />
-                    <AlertDescription>
-                      Your account uses Google sign-in and does not have a password. Your security is managed by Google.
-                    </AlertDescription>
-                  </Alert>
+                {!linkedProviders.password ? (
+                  // Set backup password UI for users without password (Google-only)
+                  <div className="space-y-4">
+                    <Alert>
+                      <Shield className="h-4 w-4" />
+                      <AlertDescription>
+                        <p className="font-medium mb-2">Add a backup password to your account</p>
+                        <p className="text-sm text-muted-foreground">
+                          Your account currently uses Google sign-in. Adding a password provides a backup way to access your account.
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+
+                    <form onSubmit={handleSetBackupPassword} className="space-y-4">
+                      <PasswordInput
+                        label="New Password"
+                        value={newPassword}
+                        onChange={(value) => setNewPassword(value)}
+                        placeholder="Create a strong password"
+                        showStrengthMeter={true}
+                        checkBreaches={true}
+                        required={true}
+                        autoComplete="new-password"
+                        onBreachStatusChange={setIsNewPasswordBreached}
+                        disabled={passwordLoading}
+                      />
+
+                      <div>
+                        <Label htmlFor="confirmBackupPassword">Confirm Password</Label>
+                        <Input
+                          id="confirmBackupPassword"
+                          type="password"
+                          placeholder="Confirm new password"
+                          value={confirmNewPassword}
+                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          disabled={passwordLoading}
+                          className="mt-2"
+                        />
+                        {confirmNewPassword && newPassword !== confirmNewPassword && (
+                          <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Passwords don't match
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end pt-4 border-t border-border">
+                        <Button
+                          type="submit"
+                          disabled={
+                            passwordLoading ||
+                            !newPassword ||
+                            !confirmNewPassword ||
+                            newPassword !== confirmNewPassword ||
+                            newPassword.length < 8 ||
+                            isNewPasswordBreached
+                          }
+                          className="gradient-primary"
+                        >
+                          {passwordLoading ? 'Setting Password...' : 'Set Backup Password'}
+                        </Button>
+                      </div>
+                      {!passwordLoading && (isNewPasswordBreached || newPassword.length < 8 || newPassword !== confirmNewPassword) && newPassword && (
+                        <p className="text-xs text-center text-muted-foreground">
+                          {isNewPasswordBreached && '⚠️ Cannot use breached password'}
+                          {!isNewPasswordBreached && newPassword.length < 8 && '⚠️ Password must be at least 8 characters'}
+                          {!isNewPasswordBreached && newPassword.length >= 8 && newPassword !== confirmNewPassword && '⚠️ Passwords must match'}
+                        </p>
+                      )}
+                    </form>
+                  </div>
                 ) : (
+                  // Change password form for users with password (password-only OR Google+password)
                   <form onSubmit={handlePasswordChange} className="space-y-4">
                     <div>
                       <Label htmlFor="currentPassword">Current Password</Label>
@@ -750,21 +866,18 @@ export default function Settings() {
 
                     <Separator />
 
-                    <div>
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <Input
-                        id="newPassword"
-                        type="password"
-                        placeholder="Enter new password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        disabled={passwordLoading}
-                        className="mt-2"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Must be at least 8 characters
-                      </p>
-                    </div>
+                    <PasswordInput
+                      label="New Password"
+                      value={newPassword}
+                      onChange={(value) => setNewPassword(value)}
+                      placeholder="Create a strong password"
+                      showStrengthMeter={true}
+                      checkBreaches={true}
+                      required={true}
+                      autoComplete="new-password"
+                      onBreachStatusChange={setIsNewPasswordBreached}
+                      disabled={passwordLoading}
+                    />
 
                     <div>
                       <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
@@ -777,16 +890,37 @@ export default function Settings() {
                         disabled={passwordLoading}
                         className="mt-2"
                       />
+                      {confirmNewPassword && newPassword !== confirmNewPassword && (
+                        <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Passwords don't match
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex justify-end pt-4 border-t border-border">
                       <Button
                         type="submit"
-                        disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
+                        disabled={
+                          passwordLoading ||
+                          !currentPassword ||
+                          !newPassword ||
+                          !confirmNewPassword ||
+                          newPassword !== confirmNewPassword ||
+                          newPassword.length < 8 ||
+                          isNewPasswordBreached
+                        }
                       >
                         {passwordLoading ? 'Updating...' : 'Update Password'}
                       </Button>
                     </div>
+                    {!passwordLoading && (isNewPasswordBreached || newPassword.length < 8 || newPassword !== confirmNewPassword) && newPassword && (
+                      <p className="text-xs text-center text-muted-foreground">
+                        {isNewPasswordBreached && '⚠️ Cannot use breached password'}
+                        {!isNewPasswordBreached && newPassword.length < 8 && '⚠️ Password must be at least 8 characters'}
+                        {!isNewPasswordBreached && newPassword.length >= 8 && newPassword !== confirmNewPassword && '⚠️ Passwords must match'}
+                      </p>
+                    )}
                   </form>
                 )}
               </CardContent>
@@ -812,6 +946,7 @@ export default function Settings() {
                   onLink={handleLinkGoogle}
                   onUnlink={() => handleUnlinkProvider('google.com')}
                   loading={linkingLoading}
+                  disableUnlink={hasOnlyOneMethod}
                 />
 
                 {/* Password Sign-in Method */}
@@ -819,9 +954,10 @@ export default function Settings() {
                   provider="password"
                   connected={linkedProviders.password}
                   email={linkedProviders.password ? currentUser?.email : undefined}
-                  onLink={() => setShowAddPasswordDialog(true)}
+                  onLink={handleScrollToPasswordSection}
                   onUnlink={() => handleUnlinkProvider('password')}
                   loading={linkingLoading}
+                  disableUnlink={hasOnlyOneMethod}
                 />
 
                 {/* Info Alert */}
@@ -908,161 +1044,39 @@ export default function Settings() {
               </DialogContent>
             </Dialog>
           </TabsContent>
-
-          {/* Notifications Settings */}
-          <TabsContent value="notifications">
-            <Card className="shadow-medium">
-              <CardHeader>
-                <CardTitle>Notification Preferences</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Processing Complete</p>
-                      <p className="text-sm text-muted-foreground">
-                        Get notified when your video processing is done
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Weekly Summary</p>
-                      <p className="text-sm text-muted-foreground">
-                        Receive a weekly summary of your activity
-                      </p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Product Updates</p>
-                      <p className="text-sm text-muted-foreground">
-                        News about new features and improvements
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Marketing Emails</p>
-                      <p className="text-sm text-muted-foreground">
-                        Tips, tricks, and promotional content
-                      </p>
-                    </div>
-                    <Switch />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-4 border-t border-border">
-                  <Button className="gradient-primary">Save Preferences</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* API Settings */}
-          <TabsContent value="api">
-            <Card className="shadow-medium">
-              <CardHeader>
-                <CardTitle>API Access</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <Label>Your API Key</Label>
-                  <div className="flex gap-2 mt-2">
-                    <Input 
-                      type="password" 
-                      value="sk_live_xxxxxxxxxxxxxxxxxxxx" 
-                      readOnly 
-                      className="font-mono text-sm"
-                    />
-                    <Button variant="outline">Copy</Button>
-                    <Button variant="outline">Regenerate</Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Keep your API key secure. Do not share it publicly.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-lg bg-muted/50 border border-border">
-                  <h4 className="font-semibold mb-2">API Documentation</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Learn how to integrate NebulaAI into your workflow
-                  </p>
-                  <Button variant="outline" size="sm">
-                    View Documentation
-                  </Button>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold mb-4">Usage This Month</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-lg bg-muted/30">
-                      <p className="text-sm text-muted-foreground mb-1">API Calls</p>
-                      <p className="text-2xl font-bold">1,247</p>
-                    </div>
-                    <div className="p-4 rounded-lg bg-muted/30">
-                      <p className="text-sm text-muted-foreground mb-1">Data Transferred</p>
-                      <p className="text-2xl font-bold">45.2 GB</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Team Settings */}
-          <TabsContent value="team">
-            <Card className="shadow-medium">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Team Members</span>
-                  <Button className="gradient-primary" size="sm">Invite Member</Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  {
-                    name: currentUser?.displayName || "User",
-                    email: currentUser?.email || "",
-                    role: "Owner"
-                  },
-                  { name: "Sarah Chen", email: "sarah@example.com", role: "Admin" },
-                  { name: "Mike Johnson", email: "mike@example.com", role: "Member" }
-                ].map((member, i) => (
-                  <div 
-                    key={i}
-                    className="flex items-center justify-between p-4 rounded-lg bg-muted/30"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarFallback className="bg-primary text-primary-foreground">
-                          {member.name.split(' ').map(n => n[0]).join('')}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{member.name}</p>
-                        <p className="text-sm text-muted-foreground">{member.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-muted-foreground">{member.role}</span>
-                      {member.role !== "Owner" && (
-                        <Button variant="ghost" size="sm">Remove</Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Unlink Provider Confirmation Dialog */}
+      <AlertDialog open={unlinkDialog.open} onOpenChange={(open) => !open && setUnlinkDialog({ open: false, providerId: null, providerName: '' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlink {unlinkDialog.providerName}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to unlink <strong>{unlinkDialog.providerName}</strong>?
+              {hasOnlyOneMethod ? (
+                <span className="block mt-2 text-red-600 dark:text-red-400 font-medium">
+                  ⚠️ You must have at least one sign-in method to access your account.
+                </span>
+              ) : (
+                <span className="block mt-2">
+                  You will no longer be able to sign in with this method, but you can re-link it later if needed.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={linkingLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmUnlinkProvider}
+              disabled={linkingLoading}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {linkingLoading ? 'Unlinking...' : 'Unlink'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

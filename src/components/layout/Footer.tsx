@@ -1,27 +1,19 @@
 import { Link } from "react-router-dom";
-import { Twitter, Github, Linkedin, Mail, Heart } from "lucide-react";
+import { Instagram, Mail, Heart } from "lucide-react";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
 
   const footerLinks = {
     product: [
-      { name: "Features", href: "#features" },
+      { name: "Features", href: "/features" },
       { name: "Pricing", href: "/billing" },
       { name: "Templates", href: "/templates" },
       { name: "Dashboard", href: "/dashboard" },
     ],
-    resources: [
-      { name: "Documentation", href: "#docs" },
-      { name: "Guides", href: "#guides" },
-      { name: "API Reference", href: "#api" },
-      { name: "Support", href: "#support" },
-    ],
     company: [
       { name: "About", href: "#about" },
-      { name: "Blog", href: "#blog" },
-      { name: "Careers", href: "#careers" },
-      { name: "Contact", href: "/contact" },
+      { name: "Contact", href: "#contact" },
     ],
     legal: [
       { name: "Privacy Policy", href: "/privacy" },
@@ -32,16 +24,14 @@ export function Footer() {
   };
 
   const socialLinks = [
-    { icon: Twitter, href: "#twitter", label: "Twitter" },
-    { icon: Github, href: "#github", label: "GitHub" },
-    { icon: Linkedin, href: "#linkedin", label: "LinkedIn" },
+    { icon: Instagram, href: "#instagram", label: "Instagram" },
     { icon: Mail, href: "#email", label: "Email" },
   ];
 
   return (
     <footer className="border-t border-border/40 bg-background/95 backdrop-blur-sm mt-auto">
       <div className="container mx-auto px-6 py-12">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-8 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-8">
           {/* Brand Column */}
           <div className="col-span-2 space-y-4">
             <Link to="/" className="flex items-center gap-2 group">
@@ -95,23 +85,6 @@ export function Footer() {
                   >
                     {link.name}
                   </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Resources Links */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-sm">Resources</h3>
-            <ul className="space-y-2">
-              {footerLinks.resources.map((link) => (
-                <li key={link.name}>
-                  <a
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    {link.name}
-                  </a>
                 </li>
               ))}
             </ul>
