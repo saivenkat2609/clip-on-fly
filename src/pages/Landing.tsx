@@ -108,7 +108,7 @@ const pricingTiers = [
     period: "/month",
     description: "For teams and agencies",
     features: [
-      "500 minutes of video per month",
+      "350 minutes of video per month",
       "4K exports",
       "Team collaboration",
       "API access",

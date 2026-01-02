@@ -11,6 +11,8 @@ export interface RazorpayOptions {
   handler: (response: RazorpaySuccessResponse) => void;
   modal: {
     ondismiss: () => void;
+    escape?: boolean;
+    backdropclose?: boolean;
   };
   prefill: {
     name: string;

@@ -167,7 +167,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           storageUsed: 0,
           company: '',
           plan: 'Free',
-          totalCredits: 60, // Total credits per month for Free plan
+          totalCredits: 30, // Total credits per month for Free plan
           creditsUsed: 0,
           creditsExpiryDate: creditsExpiryDate,
           subscriptionStatus: 'none',
@@ -326,7 +326,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           storageUsed: 0,
           company: '',
           plan: 'Free',
-          totalCredits: 60, // Total credits per month for Free plan
+          totalCredits: 30, // Total credits per month for Free plan
           creditsUsed: 0,
           creditsExpiryDate: creditsExpiryDate,
           subscriptionStatus: 'none',

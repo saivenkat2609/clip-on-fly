@@ -18,21 +18,21 @@ export const PRICING: Record<
   Starter: {
     monthly: {
       USD: 29,
-      INR: 2400, // Approx $29 USD = ₹2,400
+      INR: 149, // Approx $29 USD = ₹2,400
     },
     yearly: {
       USD: 279, // Save $69 (20% discount from $348)
-      INR: 23200, // Save ₹5,600 (20% discount from ₹28,800)
+      INR: 1430, // Save ₹5,600 (20% discount from ₹28,800)
     },
   },
   Professional: {
     monthly: {
-      USD: 79,
-      INR: 6560, // Approx $79 USD = ₹6,560
+      USD: 249,
+      INR: 249, // Approx $79 USD = ₹6,560
     },
     yearly: {
       USD: 758, // Save $190 (20% discount from $948)
-      INR: 63064, // Save ₹15,656 (20% discount from ₹78,720)
+      INR: 2390, // Save ₹15,656 (20% discount from ₹78,720)
     },
   },
 };

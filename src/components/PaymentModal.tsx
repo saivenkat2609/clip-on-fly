@@ -47,21 +47,38 @@ export function PaymentModal({
 
     try {
       // Step 1: Create subscription in backend
+      toast({
+        title: 'Creating subscription...',
+        description: 'Please wait while we prepare your payment.',
+      });
+
       const subscriptionData = await createSubscription.mutateAsync({
         planName,
         billingPeriod,
         currency,
       });
 
-      // Step 2: Open Razorpay checkout
+      // Step 2: Close this modal BEFORE opening Razorpay
+      // This prevents modal stacking and focus issues
+      onClose();
+
+      // Small delay to ensure modal closes completely
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Step 3: Open Razorpay checkout (modal is now closed)
       await openRazorpayCheckout({
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         subscription_id: subscriptionData.subscriptionId,
         name: 'NebulaAI',
         description: `${planName} Plan - ${billingPeriod}`,
         handler: async (response) => {
-          // Step 3: Verify payment on backend
+          // Step 4: Verify payment on backend
           try {
+            toast({
+              title: 'Verifying payment...',
+              description: 'Please wait a moment.',
+            });
+
             const result = await verifyPayment.mutateAsync({
               razorpayPaymentId: response.razorpay_payment_id,
               razorpaySubscriptionId: response.razorpay_subscription_id,
@@ -73,7 +90,9 @@ export function PaymentModal({
                 title: 'Success! 🎉',
                 description: 'Your subscription has been activated successfully.',
               });
-              onClose();
+
+              // Force refresh to update UI
+              window.location.reload();
             } else {
               toast({
                 title: 'Payment Verification Failed',
@@ -87,8 +106,6 @@ export function PaymentModal({
               description: error.message || 'Please contact support.',
               variant: 'destructive',
             });
-          } finally {
-            setIsProcessing(false);
           }
         },
         modal: {
@@ -99,6 +116,8 @@ export function PaymentModal({
               description: 'You can try again anytime.',
             });
           },
+          escape: false, // Prevent accidental closure with ESC key
+          backdropclose: false, // Prevent closing by clicking outside
         },
         prefill: {
           name: currentUser.displayName || '',
@@ -116,12 +135,23 @@ export function PaymentModal({
         variant: 'destructive',
       });
       setIsProcessing(false);
+      onClose(); // Close modal on error
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      // Prevent closing while processing
+      if (!isProcessing && !open) {
+        onClose();
+      }
+    }}>
+      <DialogContent className="sm:max-w-md" onInteractOutside={(e) => {
+        // Prevent closing by clicking outside while processing
+        if (isProcessing) {
+          e.preventDefault();
+        }
+      }}>
         <DialogHeader>
           <DialogTitle>Complete Your Purchase</DialogTitle>
           <DialogDescription>

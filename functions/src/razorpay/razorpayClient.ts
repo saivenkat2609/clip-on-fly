@@ -137,6 +137,18 @@ export class RazorpayClient {
   }
 
   /**
+   * Fetch payment details
+   */
+  async fetchPayment(paymentId: string) {
+    try {
+      return await this.razorpay.payments.fetch(paymentId);
+    } catch (error: any) {
+      console.error('Fetch payment error:', error);
+      throw new Error(`Failed to fetch payment: ${error.message}`);
+    }
+  }
+
+  /**
    * Fetch customer details
    */
   async fetchCustomer(customerId: string) {

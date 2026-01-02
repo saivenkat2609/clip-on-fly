@@ -154,8 +154,10 @@ export function useUserPlan() {
   return {
     ...rest,
     plan: profile?.plan || 'Free',
-    totalCredits: profile?.totalCredits || 60,
+    totalCredits: profile?.totalCredits || 30,
+    creditsUsed: profile?.creditsUsed || 0,
     creditsExpiryDate: profile?.creditsExpiryDate,
+    subscriptionStatus: profile?.subscriptionStatus,
   };
 }
 

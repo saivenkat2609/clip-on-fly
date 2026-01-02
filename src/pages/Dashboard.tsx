@@ -145,7 +145,7 @@ export default function Dashboard() {
 
   // Use cached hooks - ONLY Dashboard gets real-time updates for video processing status
   const { data: videos = [], isLoading: loading, error: queryError } = useVideos({ realTime: true });
-  const { plan: userPlan = "Free", totalCredits = 60, creditsExpiryDate, isLoading: loadingCredits } = useUserPlan();
+  const { plan: userPlan = "Free", totalCredits = 30, creditsExpiryDate, isLoading: loadingCredits } = useUserPlan();
 
   // Get processing videos for WebSocket connection
   const processingVideos = useMemo(

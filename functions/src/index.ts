@@ -588,8 +588,9 @@ export const verifyRazorpayPayment = functions
     );
 
     try {
-      // Fetch subscription from Razorpay
+      // Fetch subscription and payment from Razorpay
       const subscription = await razorpayClient.fetchSubscription(razorpaySubscriptionId);
+      const payment = await razorpayClient.fetchPayment(razorpayPaymentId);
 
       if (subscription.status === 'active') {
         // Update Firestore subscription
@@ -628,7 +629,7 @@ export const verifyRazorpayPayment = functions
           ...planFeatures,
         });
 
-        // Create transaction record
+        // Create transaction record with actual payment amount
         await db
           .collection('users')
           .doc(userId)
@@ -636,13 +637,17 @@ export const verifyRazorpayPayment = functions
           .add({
             razorpayPaymentId,
             razorpaySubscriptionId,
+            razorpayInvoiceId: payment.invoice_id || null,
             userId,
             planName: subscriptionData.planName,
             billingPeriod: subscriptionData.billingPeriod,
-            amount: subscriptionData.amount,
-            currency: subscriptionData.currency,
-            status: 'captured',
-            method: 'card',
+            amount: payment.amount, // Actual payment amount from Razorpay
+            currency: payment.currency,
+            status: payment.status,
+            method: payment.method || 'card',
+            cardLast4: payment.card?.last4 || null,
+            cardNetwork: payment.card?.network || null,
+            paidAt: admin.firestore.FieldValue.serverTimestamp(),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             description: `${subscriptionData.planName} Plan - ${subscriptionData.billingPeriod}`,
           });
