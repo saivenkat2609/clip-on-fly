@@ -167,7 +167,7 @@ export function PasswordInput({
       {showStrengthMeter && value && strength && !error && !isBreached && (
         <div className="space-y-2">
           {/* Strength bars */}
-          <div className="flex gap-1">
+          <div className="flex gap-1 w-1/2">
             {[0, 1, 2, 3, 4].map((i) => (
               <div
                 key={i}

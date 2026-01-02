@@ -16,6 +16,7 @@ interface SignInMethodCardProps {
   onLink: () => void;
   onUnlink: () => void;
   loading?: boolean;
+  disableUnlink?: boolean;
 }
 
 export function SignInMethodCard({
@@ -25,6 +26,7 @@ export function SignInMethodCard({
   onLink,
   onUnlink,
   loading = false,
+  disableUnlink = false,
 }: SignInMethodCardProps) {
   const providerConfig = {
     google: {
@@ -92,8 +94,9 @@ export function SignInMethodCard({
                 variant="ghost"
                 size="sm"
                 onClick={onUnlink}
-                disabled={loading}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                disabled={loading || disableUnlink}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={disableUnlink ? "You must have at least one sign-in method" : "Unlink this sign-in method"}
               >
                 <X className="h-4 w-4 mr-1" />
                 Unlink

@@ -45,3 +45,31 @@ export function getDisplayName(user: User | null): string {
   if (!user) return "User";
   return user.displayName || user.email || "User";
 }
+
+/**
+ * Get user's authentication providers (handles both old and new format)
+ * Old format: provider (string)
+ * New format: providers (array)
+ */
+export function getUserProviders(userData: any): ('password' | 'google')[] {
+  // New format with providers array
+  if (userData.providers && Array.isArray(userData.providers)) {
+    return userData.providers;
+  }
+
+  // Old format with single provider
+  if (userData.provider) {
+    return [userData.provider];
+  }
+
+  // Fallback
+  return [];
+}
+
+/**
+ * Check if user has linked multiple authentication providers
+ */
+export function hasLinkedProviders(userData: any): boolean {
+  const providers = getUserProviders(userData);
+  return providers.length > 1;
+}

@@ -15,6 +15,8 @@ import { fetchSignInMethodsForEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { PasswordInput } from '@/components/PasswordInput';
 import { setSessionPersistence } from '@/lib/sessionManager';
+import { cn } from '@/lib/utils';
+import { AccountLinkingModal } from '@/components/AccountLinkingModal';
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -62,6 +64,25 @@ export default function Login() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginErrors, setLoginErrors] = useState({ email: '', password: '' });
 
+  // Real-time provider detection for login form
+  const [loginEmailProvider, setLoginEmailProvider] = useState<{
+    status: 'idle' | 'checking' | 'detected';
+    provider: 'google' | 'password' | 'none' | null;
+    message: string;
+  } | null>(null);
+
+  // Ref for debouncing provider check
+  const providerCheckTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Account linking modal state
+  const [linkingModal, setLinkingModal] = useState<{
+    open: boolean;
+    email: string;
+    existingProvider: 'password' | 'google';
+    newProvider: 'password' | 'google';
+    pendingCredential: any;
+  } | null>(null);
+
   // Separate state for signup form
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
@@ -72,7 +93,7 @@ export default function Login() {
   // Password validation state for signup
   const [isPasswordBreached, setIsPasswordBreached] = useState(false);
 
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, linkGoogleProvider, currentUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,14 +105,34 @@ export default function Login() {
     setLoginEmail('');
     setLoginPassword('');
     setLoginErrors({ email: '', password: '' });
+    setLoginEmailProvider(null);
     setSignupEmail('');
     setSignupPassword('');
     setSignupConfirmPassword('');
     setSignupErrors({ email: '', password: '', confirmPassword: '' });
     setEmailValidationStatus('idle');
-    setProviderConflict(null);
+    // Don't clear providerConflict - it should persist to show the user what went wrong
     setIsPasswordBreached(false);
   }, [isSignUp]);
+
+  // Handle query parameter for signup redirect
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('signup') === 'true') {
+      setIsSignUp(true);
+    }
+  }, [location.search]);
+
+  // Auto-redirect authenticated users (prevents flash of login page)
+  useEffect(() => {
+    // Only redirect if:
+    // 1. Auth state is stable (not loading)
+    // 2. User is authenticated
+    // 3. Not currently processing a login/signup action
+    if (!authLoading && currentUser && !googleLoading && !loading) {
+      navigate(from, { replace: true });
+    }
+  }, [currentUser, authLoading, googleLoading, loading, navigate, from]);
 
   // UI/UX FIX #90: Debounced email API check
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -157,6 +198,68 @@ export default function Login() {
     // UI/UX FIX #90: Debounce API call by 500ms
     debounceTimerRef.current = setTimeout(() => {
       checkEmailExists(email);
+    }, 500);
+  };
+
+  // Real-time provider detection for login form with debouncing
+  const handleLoginEmailChange = (email: string) => {
+    setLoginEmail(email);
+    setLoginErrors(prev => ({ ...prev, email: '' }));
+
+    // Clear previous timer
+    if (providerCheckTimerRef.current) {
+      clearTimeout(providerCheckTimerRef.current);
+    }
+
+    // Basic validation first (instant)
+    if (!email || email.length < 3) {
+      setLoginEmailProvider(null);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setLoginEmailProvider(null);
+      return;
+    }
+
+    // Debounce the API call (500ms)
+    setLoginEmailProvider({ status: 'checking', provider: null, message: '' });
+    providerCheckTimerRef.current = setTimeout(async () => {
+      try {
+        console.log('Checking sign-in methods for:', email);
+        const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+        console.log('Sign-in methods found:', signInMethods);
+
+        if (signInMethods.length === 0) {
+          console.log('No sign-in methods found for:', email);
+          // Don't show any message - Email Enumeration Protection is likely enabled
+          setLoginEmailProvider(null);
+        } else if (signInMethods.includes('google.com') && !signInMethods.includes('password')) {
+          console.log('Google-only account detected for:', email);
+          setLoginEmailProvider({
+            status: 'detected',
+            provider: 'google',
+            message: 'A Google account exists with this email. Please sign in with Google, then you can add a password in Settings.'
+          });
+        } else if (signInMethods.includes('password')) {
+          console.log('Password account detected for:', email);
+          setLoginEmailProvider({
+            status: 'detected',
+            provider: 'password',
+            message: 'This email uses password sign-in.'
+          });
+        }
+      } catch (error) {
+        // Log the error for debugging
+        console.error('Error checking sign-in methods:', error);
+        // Show a message that we couldn't check
+        setLoginEmailProvider({
+          status: 'detected',
+          provider: null,
+          message: 'Unable to verify account. Please try signing in.'
+        });
+      }
     }, 500);
   };
 
@@ -243,7 +346,7 @@ export default function Login() {
         title: 'Welcome back!',
         description: 'You have successfully signed in.',
       });
-      navigate(from, { replace: true });
+      // Navigation handled by auto-redirect useEffect
     } catch (error: any) {
       // Check if account exists with Google only (MongoDB Atlas pattern)
       if ((error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') && error.message.includes('Google sign-in')) {
@@ -253,10 +356,33 @@ export default function Login() {
           message: error.message || 'This account was created with Google. Please use the "Continue with Google" button to sign in.',
         });
       } else if (error.code === 'auth/user-not-found') {
-        setLoginErrors(prev => ({
-          ...prev,
-          email: 'No account found with this email. Please sign up first.'
-        }));
+        // Check if there might be a Google account
+        try {
+          const methods = await fetchSignInMethodsForEmail(auth, loginEmail);
+          if (methods.includes('google.com')) {
+            // Google account exists, show provider conflict
+            setProviderConflict({
+              email: loginEmail,
+              suggestedProvider: 'google',
+              message: 'This email has a Google account. Please use "Continue with Google" to sign in, then add a password in Settings if needed.',
+            });
+          } else {
+            // Cannot determine if Google account exists (Email Enumeration Protection)
+            // Show helpful message that covers both cases
+            setProviderConflict({
+              email: loginEmail,
+              suggestedProvider: 'google',
+              message: 'No password found for this email. If you signed up with Google, use "Continue with Google" below. Otherwise, please sign up.',
+            });
+          }
+        } catch {
+          // If provider check fails, show helpful message
+          setProviderConflict({
+            email: loginEmail,
+            suggestedProvider: 'google',
+            message: 'No password found for this email. If you signed up with Google, use "Continue with Google" below. Otherwise, please sign up.',
+          });
+        }
       } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         // Track failed attempts
         const newAttempts = failedLoginAttempts + 1;
@@ -301,7 +427,7 @@ export default function Login() {
         title: 'Account created successfully!',
         description: 'Welcome to ClipForge! A verification email has been sent to your inbox.',
       });
-      navigate(from, { replace: true });
+      // Navigation handled by auto-redirect useEffect
     } catch (error: any) {
       // Check for provider conflicts (MongoDB Atlas pattern)
       if (error.code === 'auth/email-already-in-use' && error.message.includes('Google')) {
@@ -321,11 +447,16 @@ export default function Login() {
         // Switch to login mode
         setIsSignUp(false);
       } else if (error.code === 'auth/email-already-in-use') {
-        setEmailValidationStatus('invalid');
-        setSignupErrors(prev => ({
-          ...prev,
-          email: 'This email is already registered. Please sign in with your password or use Google.'
-        }));
+        // Generic email-already-in-use (Email Enumeration Protection active)
+        // Show helpful provider conflict alert with both options
+        setProviderConflict({
+          email: signupEmail,
+          suggestedProvider: 'google', // Suggest Google first, but show both options
+          message: 'This email is already registered. Try signing in with Google, or use your password below.',
+        });
+        // Switch to login mode and pre-fill email
+        setIsSignUp(false);
+        setLoginEmail(signupEmail);
       } else if (error.code === 'auth/weak-password') {
         setSignupErrors(prev => ({
           ...prev,
@@ -363,12 +494,22 @@ export default function Login() {
         await setSessionPersistence(true);
       }
 
-      await signInWithGoogle();
-      navigate(from, { replace: true });
+      // Try to sign in with Google, with credential return on conflict
+      await signInWithGoogle({ returnCredentialOnConflict: true });
+      // Navigation handled by auto-redirect useEffect
     } catch (error: any) {
-      // Check if it's a provider conflict error
-      if (error.code === 'auth/account-exists-with-different-credential') {
-        // Extract email from error or show generic message
+      // Check if it's a provider conflict error that we can link
+      if (error.code === 'auth/account-exists-with-different-credential' && error.credential) {
+        // Show linking modal
+        setLinkingModal({
+          open: true,
+          email: error.email,
+          existingProvider: 'password',
+          newProvider: 'google',
+          pendingCredential: error.credential
+        });
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        // No credential available, show error
         setProviderConflict({
           email: '',
           suggestedProvider: 'password',
@@ -390,8 +531,54 @@ export default function Login() {
     }
   };
 
+  // Handle account linking confirmation
+  const handleConfirmLinking = async () => {
+    if (!linkingModal?.pendingCredential) return;
+
+    setGoogleLoading(true);
+    try {
+      // Link the Google credential to the existing password account
+      await linkGoogleProvider(linkingModal.pendingCredential);
+
+      setLinkingModal(null);
+      toast({
+        title: 'Account linked!',
+        description: 'You can now sign in with Google or password.',
+      });
+      // Navigation handled by auto-redirect useEffect
+    } catch (error: any) {
+      toast({
+        title: 'Failed to link account',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Handle account linking cancellation
+  const handleCancelLinking = () => {
+    setLinkingModal(null);
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Full-screen loader during authentication transition */}
+      {!authLoading && currentUser && (
+        <div className="fixed inset-0 z-50 bg-background flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary animate-pulse">
+              <Sparkles className="h-8 w-8 text-primary-foreground" />
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              <p className="text-sm text-muted-foreground">Signing you in...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4">
@@ -423,24 +610,7 @@ export default function Login() {
               <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
                 <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
-                  <p className="font-medium mb-2">{providerConflict.message}</p>
-                  {providerConflict.suggestedProvider === 'google' ? (
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="sm"
-                      className="mt-2"
-                      onClick={handleGoogleSignIn}
-                      disabled={googleLoading}
-                    >
-                      <Chrome className="mr-2 h-3 w-3" />
-                      Sign in with Google
-                    </Button>
-                  ) : (
-                    <p className="text-xs mt-1">
-                      Please use the email and password form below to sign in.
-                    </p>
-                  )}
+                  <p className="font-medium">{providerConflict.message}</p>
                 </AlertDescription>
               </Alert>
             )}
@@ -602,14 +772,42 @@ export default function Login() {
                       type="email"
                       placeholder="you@example.com"
                       value={loginEmail}
-                      onChange={(e) => {
-                        setLoginEmail(e.target.value);
-                        setLoginErrors(prev => ({ ...prev, email: '' }));
-                      }}
+                      onChange={(e) => handleLoginEmailChange(e.target.value)}
                       disabled={loading}
-                      className="pl-10"
+                      className={cn(
+                        "pl-10",
+                        loginEmailProvider?.provider === 'google' && "border-blue-500"
+                      )}
                     />
                   </div>
+
+                  {/* Provider detection hint */}
+                  {loginEmailProvider?.status === 'detected' && loginEmailProvider.provider === 'google' && (
+                    <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
+                      <Info className="h-4 w-4 text-blue-600" />
+                      <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                        <p className="font-medium">{loginEmailProvider.message}</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={handleGoogleSignIn}
+                        >
+                          <Chrome className="mr-2 h-3 w-3" />
+                          Sign in with Google
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {loginEmailProvider?.status === 'detected' && loginEmailProvider.provider === 'none' && (
+                    <p className="text-sm text-orange-600 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {loginEmailProvider.message}
+                    </p>
+                  )}
+
                   {loginErrors.email && (
                     <p className="text-sm text-red-600 flex items-center gap-1">
                       <AlertCircle className="h-3 w-3" />
@@ -699,7 +897,10 @@ export default function Login() {
                   Already have an account?{' '}
                   <button
                     type="button"
-                    onClick={() => setIsSignUp(false)}
+                    onClick={() => {
+                      setIsSignUp(false);
+                      setProviderConflict(null); // Clear alert on manual switch
+                    }}
                     className="text-primary hover:underline font-medium"
                   >
                     Sign in
@@ -710,7 +911,10 @@ export default function Login() {
                   Don't have an account?{' '}
                   <button
                     type="button"
-                    onClick={() => setIsSignUp(true)}
+                    onClick={() => {
+                      setIsSignUp(true);
+                      setProviderConflict(null); // Clear alert on manual switch
+                    }}
                     className="text-primary hover:underline font-medium"
                   >
                     Sign up
@@ -727,6 +931,20 @@ export default function Login() {
           </CardFooter>
         </Card>
       </div>
+
+      {/* Account Linking Modal */}
+      {linkingModal && (
+        <AccountLinkingModal
+          open={linkingModal.open}
+          onOpenChange={(open) => !open && setLinkingModal(null)}
+          onConfirm={handleConfirmLinking}
+          onCancel={handleCancelLinking}
+          email={linkingModal.email}
+          existingProvider={linkingModal.existingProvider}
+          newProvider={linkingModal.newProvider}
+          loading={googleLoading}
+        />
+      )}
     </div>
   );
 }

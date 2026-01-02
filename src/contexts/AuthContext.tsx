@@ -18,6 +18,8 @@ import {
   linkWithPopup,
   linkWithCredential,
   unlink,
+  OAuthCredential,
+  GoogleAuthProvider,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
@@ -39,15 +41,15 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (options?: { returnCredentialOnConflict?: boolean }) => Promise<void>;
+  linkGoogleProvider: (credential: OAuthCredential) => Promise<void>;
+  linkPasswordProvider: (password: string) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   changeEmail: (newEmail: string, currentPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  linkGoogleProvider: () => Promise<void>;
-  linkPasswordProvider: (password: string) => Promise<void>;
   unlinkProvider: (providerId: 'google.com' | 'password') => Promise<void>;
   getLinkedProviders: () => { google: boolean; password: boolean };
 }
@@ -250,7 +252,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  async function signInWithGoogle() {
+  async function signInWithGoogle(options?: { returnCredentialOnConflict?: boolean }) {
     try {
       // Sign in with Google popup
       const result = await signInWithPopup(auth, googleProvider);
@@ -270,7 +272,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error('Only Gmail accounts are allowed. Please sign in with a Gmail account.');
       }
 
-      // Check if user document exists in Firestore
+      // Check if this email was previously registered with email/password
+      const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+      const hasPasswordProvider = signInMethods.includes('password');
+      const hasGoogleProvider = signInMethods.includes('google.com');
+
+      // If user already has a password account but not Google, this means Firebase just linked them automatically
+      // MongoDB Atlas pattern: we should prevent this and tell them to use their password
+      if (hasPasswordProvider && !hasGoogleProvider) {
+        // Sign out the automatically created/linked account
+        await signOut(auth);
+
+        // If caller wants to handle linking, return the credential
+        if (options?.returnCredentialOnConflict) {
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          const error: any = new Error('This email is already registered with a password.');
+          error.code = 'auth/account-exists-with-different-credential';
+          error.credential = credential;
+          error.email = email;
+          throw error;
+        }
+
+        // Otherwise, throw blocking error
+        const error = new Error('This email is already registered with a password. Please sign in using your email and password instead.');
+        (error as any).code = 'auth/account-exists-with-different-credential';
+        throw error;
+      }
+
+      // Google OAuth emails are already verified, no additional checks needed
+
+      // Create or update user profile in Firestore
       const userDocRef = doc(db, 'users', result.user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
@@ -374,7 +405,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error(validation.error);
     }
 
-    // Send password reset email
+    // Check if account exists and what providers it uses
+    const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+
+    if (signInMethods.length === 0) {
+      // No account exists
+      const error = new Error('No account found with this email address. Please sign up first.');
+      (error as any).code = 'auth/user-not-found';
+      (error as any).shouldShowSignup = true; // Custom flag
+      throw error;
+    }
+
+    const hasGoogleProvider = signInMethods.includes('google.com');
+    const hasPasswordProvider = signInMethods.includes('password');
+
+    if (hasGoogleProvider && !hasPasswordProvider) {
+      // Account uses Google only - no password to reset
+      const error = new Error('This account uses Google sign-in and does not have a password. Please use the "Continue with Google" button to sign in.');
+      (error as any).code = 'auth/no-password-account';
+      (error as any).provider = 'google';
+      throw error;
+    }
+
+    if (!hasPasswordProvider) {
+      // Should not happen, but handle edge case
+      const error = new Error('This account does not have a password. Please contact support.');
+      (error as any).code = 'auth/no-password-account';
+      throw error;
+    }
+
+    // Account has password provider - send reset email
     await sendPasswordResetEmail(auth, email);
     toast({
       title: 'Password reset email sent',
@@ -486,45 +546,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   // Link Google provider to existing account
-  async function linkGoogleProvider() {
+  async function linkGoogleProvider(credential: OAuthCredential) {
     if (!currentUser) {
       throw new Error('No user is currently signed in');
     }
 
-    const { google, password } = getLinkedProviders();
-    if (google) {
-      throw new Error('Google account is already linked');
-    }
-
     try {
-      const result = await linkWithPopup(currentUser, googleProvider);
+      // Link the Google credential to the existing password account
+      const result = await linkWithCredential(currentUser, credential);
 
-      // Update Firestore to reflect Google is now linked
-      const userDocRef = doc(db, 'users', currentUser.uid);
+      // Update Firestore to reflect both providers
+      const userDocRef = doc(db, 'users', result.user.uid);
       await setDoc(userDocRef, {
-        provider: 'google', // Update primary provider if desired
-        lastLogin: serverTimestamp(),
+        providers: ['password', 'google'], // Track both providers
+        lastLogin: serverTimestamp()
       }, { merge: true });
 
       // Log the account linking
-      await addDoc(collection(db, 'users', currentUser.uid, 'accountLinkingHistory'), {
-        action: 'link',
-        provider: 'google',
-        timestamp: serverTimestamp(),
-        ipAddress: await getClientIP(),
-      });
+      try {
+        await addDoc(collection(db, 'users', currentUser.uid, 'accountLinkingHistory'), {
+          action: 'link',
+          provider: 'google',
+          timestamp: serverTimestamp(),
+          ipAddress: await getClientIP(),
+        });
+      } catch (error) {
+        console.error('Failed to log account linking:', error);
+      }
 
       toast({
-        title: 'Google account linked',
-        description: 'You can now sign in with Google or your password.',
+        title: 'Account linked successfully!',
+        description: 'You can now sign in using Google or your password.',
       });
 
       // Refresh user to get updated provider data
       await refreshUser();
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        return;
-      }
+      console.error('Failed to link Google provider:', error);
       if (error.code === 'auth/credential-already-in-use') {
         throw new Error('This Google account is already linked to another user');
       }
@@ -543,10 +601,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error('Password authentication is already set up');
     }
 
-    if (!google) {
-      throw new Error('Can only add password to Google accounts');
-    }
-
     if (password.length < 8) {
       throw new Error('Password must be at least 8 characters');
     }
@@ -555,31 +609,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Create email/password credential
       const credential = EmailAuthProvider.credential(currentUser.email, password);
 
-      // Link it to the current user
+      // Link the password credential to the existing account
       await linkWithCredential(currentUser, credential);
 
-      // Update Firestore
+      // Update Firestore to reflect both providers
       const userDocRef = doc(db, 'users', currentUser.uid);
       await setDoc(userDocRef, {
-        lastLogin: serverTimestamp(),
+        providers: google ? ['password', 'google'] : ['password'], // Track all providers
+        lastLogin: serverTimestamp()
       }, { merge: true });
 
       // Log the account linking
-      await addDoc(collection(db, 'users', currentUser.uid, 'accountLinkingHistory'), {
-        action: 'link',
-        provider: 'password',
-        timestamp: serverTimestamp(),
-        ipAddress: await getClientIP(),
-      });
+      try {
+        await addDoc(collection(db, 'users', currentUser.uid, 'accountLinkingHistory'), {
+          action: 'link',
+          provider: 'password',
+          timestamp: serverTimestamp(),
+          ipAddress: await getClientIP(),
+        });
+      } catch (error) {
+        console.error('Failed to log account linking:', error);
+      }
 
       toast({
-        title: 'Password added',
-        description: 'You can now sign in with your email and password.',
+        title: 'Password added successfully!',
+        description: 'You can now sign in using your password or Google.',
       });
 
       // Refresh user to get updated provider data
       await refreshUser();
     } catch (error: any) {
+      console.error('Failed to link password provider:', error);
       if (error.code === 'auth/email-already-in-use') {
         throw new Error('This email is already in use by another account');
       }
@@ -708,14 +768,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signUp,
     signIn,
     signInWithGoogle,
+    linkGoogleProvider,
+    linkPasswordProvider,
     logout,
     resetPassword,
     changeEmail,
     changePassword,
     resendVerificationEmail,
     refreshUser,
-    linkGoogleProvider,
-    linkPasswordProvider,
     unlinkProvider,
     getLinkedProviders,
   };

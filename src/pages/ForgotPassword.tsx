@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Mail, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Sparkles, Mail, ArrowLeft, CheckCircle2, AlertCircle, Chrome, Info } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
 
 export default function ForgotPassword() {
@@ -14,6 +14,7 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState<'not-found' | 'google-account' | 'generic' | null>(null);
 
   const { resetPassword } = useAuth();
   const { toast } = useToast();
@@ -21,6 +22,7 @@ export default function ForgotPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setErrorType(null);
 
     // Validate email
     if (!email) {
@@ -40,11 +42,17 @@ export default function ForgotPassword() {
       await resetPassword(email);
       setEmailSent(true);
     } catch (error: any) {
-      if (error.code === 'auth/user-not-found') {
-        setError('No account found with this email address');
+      if (error.code === 'auth/user-not-found' && error.shouldShowSignup) {
+        setErrorType('not-found');
+        setError('No account found with this email address.');
+      } else if (error.code === 'auth/no-password-account' && error.provider === 'google') {
+        setErrorType('google-account');
+        setError('This account uses Google sign-in and does not have a password.');
       } else if (error.message) {
+        setErrorType('generic');
         setError(error.message);
       } else {
+        setErrorType('generic');
         setError('Failed to send reset email. Please try again.');
       }
     } finally {
@@ -110,11 +118,52 @@ export default function ForgotPassword() {
                       className="pl-10"
                     />
                   </div>
+
+                  {/* Error Display */}
                   {error && (
-                    <p className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {error}
-                    </p>
+                    <>
+                      {errorType === 'not-found' && (
+                        <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-950">
+                          <AlertCircle className="h-4 w-4 text-orange-600" />
+                          <AlertDescription className="text-sm text-orange-800 dark:text-orange-200">
+                            <p className="font-medium mb-2">{error}</p>
+                            <p className="text-xs mb-3">
+                              Would you like to create a new account with this email?
+                            </p>
+                            <Link to="/login?signup=true">
+                              <Button variant="outline" size="sm">
+                                Sign Up
+                              </Button>
+                            </Link>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {errorType === 'google-account' && (
+                        <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
+                          <Info className="h-4 w-4 text-blue-600" />
+                          <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                            <p className="font-medium mb-2">{error}</p>
+                            <p className="text-xs mb-3">
+                              Your account is managed through Google. Please sign in with Google.
+                            </p>
+                            <Link to="/login">
+                              <Button variant="outline" size="sm">
+                                <Chrome className="mr-2 h-3 w-3" />
+                                Go to Sign In
+                              </Button>
+                            </Link>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {errorType === 'generic' && (
+                        <p className="text-sm text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {error}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
 

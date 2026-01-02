@@ -28,12 +28,6 @@ const faqs: FAQItem[] = [
     question: "What makes a clip 'viral'?",
     answer: "Our AI analyzes multiple factors including hook strength, engagement patterns, pacing, trending elements, and emotional impact. Clips with higher virality scores have better potential for social media engagement.",
     icon: <HelpCircle className="h-5 w-5" />
-  },
-  {
-    id: 6,
-    question: "Can I edit the generated clips?",
-    answer: "Absolutely! Each clip can be customized with different captions, aspect ratios, and trim points. You have full control to fine-tune every clip to match your content style and platform requirements.",
-    icon: <Video className="h-5 w-5" />
   }
 ];
 
@@ -147,12 +141,6 @@ export function FAQSection() {
                 className="inline-flex items-center justify-center px-6 py-2.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-medium text-sm transition-colors"
               >
                 Contact Support
-              </a>
-              <a
-                href="/docs"
-                className="inline-flex items-center justify-center px-6 py-2.5 rounded-lg border border-border hover:bg-muted font-medium text-sm transition-colors"
-              >
-                View Documentation
               </a>
             </div>
           </div>
