@@ -741,9 +741,10 @@ export default function Billing() {
                       });
                     },
                     onError: (error: any) => {
+                      console.error('Mark videos error:', error);
                       toast({
                         title: 'Failed to Mark Videos',
-                        description: error.message,
+                        description: error?.message || error?.code || 'Unknown error occurred. Check console for details.',
                         variant: 'destructive',
                       });
                     },
@@ -774,9 +775,10 @@ export default function Billing() {
                       setTimeout(() => window.location.reload(), 1000);
                     },
                     onError: (error: any) => {
+                      console.error('Reset credits error:', error);
                       toast({
                         title: 'Failed to Reset Credits',
-                        description: error.message,
+                        description: error?.message || error?.code || 'Unknown error occurred. Check console for details.',
                         variant: 'destructive',
                       });
                     },

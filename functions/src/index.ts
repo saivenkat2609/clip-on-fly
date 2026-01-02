@@ -1016,7 +1016,10 @@ export const markAllVideosAsTracked = functions
       };
     } catch (error: any) {
       console.error('[markAllVideosAsTracked] Error:', error);
-      throw new functions.https.HttpsError('internal', error.message);
+      throw new functions.https.HttpsError(
+        'internal',
+        error?.message || 'Failed to mark videos as tracked'
+      );
     }
   });
 
@@ -1046,7 +1049,10 @@ export const resetCreditsForTesting = functions
       };
     } catch (error: any) {
       console.error('[resetCreditsForTesting] Error:', error);
-      throw new functions.https.HttpsError('internal', error.message);
+      throw new functions.https.HttpsError(
+        'internal',
+        error?.message || 'Failed to reset credits'
+      );
     }
   });
 

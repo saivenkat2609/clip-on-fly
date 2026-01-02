@@ -260,21 +260,32 @@ export function useMarkAllVideosAsTracked() {
 
   return useMutation({
     mutationFn: async () => {
-      const markVideos = httpsCallable(functions, 'markAllVideosAsTracked');
-      const result = await markVideos({});
-      return result.data as {
-        success: boolean;
-        markedCount: number;
-        alreadyMarkedCount: number;
-        totalVideos: number;
-      };
+      try {
+        const markVideos = httpsCallable(functions, 'markAllVideosAsTracked');
+        const result = await markVideos({});
+        console.log('[useMarkAllVideosAsTracked] Raw result:', result);
+        return result.data as {
+          success: boolean;
+          markedCount: number;
+          alreadyMarkedCount: number;
+          totalVideos: number;
+        };
+      } catch (error: any) {
+        console.error('[useMarkAllVideosAsTracked] Function call error:', error);
+        throw error;
+      }
     },
     onSuccess: (data) => {
       console.log('[useMarkAllVideosAsTracked] ✓ Videos marked:', data);
       queryClient.invalidateQueries({ queryKey: ['videos'] });
     },
     onError: (error: any) => {
-      console.error('[useMarkAllVideosAsTracked] Error:', error);
+      console.error('[useMarkAllVideosAsTracked] Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        full: error,
+      });
     },
   });
 }
@@ -287,12 +298,18 @@ export function useResetCreditsForTesting() {
 
   return useMutation({
     mutationFn: async () => {
-      const resetCredits = httpsCallable(functions, 'resetCreditsForTesting');
-      const result = await resetCredits({});
-      return result.data as {
-        success: boolean;
-        message: string;
-      };
+      try {
+        const resetCredits = httpsCallable(functions, 'resetCreditsForTesting');
+        const result = await resetCredits({});
+        console.log('[useResetCreditsForTesting] Raw result:', result);
+        return result.data as {
+          success: boolean;
+          message: string;
+        };
+      } catch (error: any) {
+        console.error('[useResetCreditsForTesting] Function call error:', error);
+        throw error;
+      }
     },
     onSuccess: (data) => {
       console.log('[useResetCreditsForTesting] ✓ Credits reset:', data);
@@ -311,7 +328,12 @@ export function useResetCreditsForTesting() {
       queryClient.refetchQueries({ queryKey: ['userProfile'] });
     },
     onError: (error: any) => {
-      console.error('[useResetCreditsForTesting] Error:', error);
+      console.error('[useResetCreditsForTesting] Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        full: error,
+      });
     },
   });
 }
