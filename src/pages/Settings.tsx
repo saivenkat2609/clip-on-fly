@@ -1044,7 +1044,6 @@ export default function Settings() {
               </DialogContent>
             </Dialog>
           </TabsContent>
-
         </Tabs>
       </div>
 

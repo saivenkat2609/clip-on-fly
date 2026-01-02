@@ -69,7 +69,7 @@ export default function ForgotPassword() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">ClipForge</span>
+            <span className="text-xl font-bold">NebulaAI</span>
           </Link>
         </div>
       </nav>

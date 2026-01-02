@@ -39,7 +39,7 @@ export class RazorpayClient {
         email,
         name,
         contact,
-        fail_existing: '0', // Return existing customer if found
+        fail_existing: 0 as any, // Return existing customer if found
       });
     } catch (error: any) {
       console.error('Create customer error:', error);
@@ -61,13 +61,14 @@ export class RazorpayClient {
     try {
       return await this.razorpay.subscriptions.create({
         plan_id: planId,
-        customer_id: customerId,
+        customer_notify: 1,
         total_count: 12, // For yearly plans - 12 months
         quantity: 1,
-        notify_info: notifyInfo,
         addons: [],
-        notes: {},
-      });
+        notes: {
+          customer_id: customerId,
+        },
+      } as any);
     } catch (error: any) {
       console.error('Create subscription error:', error);
       throw new Error(`Failed to create subscription: ${error.message}`);
@@ -128,7 +129,7 @@ export class RazorpayClient {
    */
   async fetchSubscriptionPayments(subscriptionId: string) {
     try {
-      return await this.razorpay.subscriptions.fetchAllPayments(subscriptionId);
+      return await (this.razorpay.subscriptions as any).fetchAllPayments(subscriptionId);
     } catch (error: any) {
       console.error('Fetch subscription payments error:', error);
       throw new Error(`Failed to fetch subscription payments: ${error.message}`);
@@ -155,11 +156,11 @@ export class RazorpayClient {
     updates: {
       plan_id?: string;
       quantity?: number;
-      schedule_change_at?: string;
+      schedule_change_at?: 'now' | 'cycle_end';
     }
   ) {
     try {
-      return await this.razorpay.subscriptions.update(subscriptionId, updates);
+      return await this.razorpay.subscriptions.update(subscriptionId, updates as any);
     } catch (error: any) {
       console.error('Update subscription error:', error);
       throw new Error(`Failed to update subscription: ${error.message}`);

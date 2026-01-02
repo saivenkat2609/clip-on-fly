@@ -21,6 +21,11 @@ import Billing from "./pages/Billing";
 import Settings from "./pages/Settings";
 import YouTubeCallback from "./pages/YouTubeCallback";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
+import CookiePolicy from "./pages/CookiePolicy";
+import RefundPolicy from "./pages/RefundPolicy";
+import Contact from "./pages/Contact";
 
 // Configure React Query with optimal caching settings
 const queryClient = new QueryClient({
@@ -54,6 +59,13 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/email-validator" element={<EmailValidator />} />
+
+              {/* Legal pages */}
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/cookies" element={<CookiePolicy />} />
+              <Route path="/refund" element={<RefundPolicy />} />
+              <Route path="/contact" element={<Contact />} />
 
               {/* Protected routes */}
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

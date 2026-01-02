@@ -12,27 +12,27 @@ export type Currency = 'INR' | 'USD';
  * IMPORTANT: Create these plans in Razorpay dashboard before using
  */
 export const PLAN_MAPPING: Record<
-  Exclude<PlanName, 'Free'>,
+  Exclude<PlanName, "Free">,
   Record<BillingPeriod, Record<Currency, string>>
 > = {
   Starter: {
     monthly: {
-      INR: 'plan_starter_monthly_inr',
-      USD: 'plan_starter_monthly_usd',
+      INR: "plan_RybpDLG1KKnDCb",
+      USD: "plan_starter_monthly_usd",
     },
     yearly: {
-      INR: 'plan_starter_yearly_inr',
-      USD: 'plan_starter_yearly_usd',
+      INR: "plan_starter_yearly_inr",
+      USD: "plan_starter_yearly_usd",
     },
   },
   Professional: {
     monthly: {
-      INR: 'plan_professional_monthly_inr',
-      USD: 'plan_professional_monthly_usd',
+      INR: "plan_professional_monthly_inr",
+      USD: "plan_professional_monthly_usd",
     },
     yearly: {
-      INR: 'plan_professional_yearly_inr',
-      USD: 'plan_professional_yearly_usd',
+      INR: "plan_professional_yearly_inr",
+      USD: "plan_professional_yearly_usd",
     },
   },
 };
