@@ -488,6 +488,22 @@ export const createRazorpaySubscription = functions
       throw new functions.https.HttpsError('not-found', 'User not found');
     }
 
+    // 3.5 Check if user already has an active subscription for this plan
+    const existingSubscriptions = await db
+      .collection('users')
+      .doc(userId)
+      .collection('subscriptions')
+      .where('planName', '==', planName)
+      .where('status', 'in', ['active', 'authenticated', 'created'])
+      .get();
+
+    if (!existingSubscriptions.empty) {
+      throw new functions.https.HttpsError(
+        'already-exists',
+        `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
+      );
+    }
+
     // 4. Initialize Razorpay client
     const razorpayClient = new RazorpayClient(
       razorpayKeyId.value(),
@@ -592,7 +608,11 @@ export const verifyRazorpayPayment = functions
       const subscription = await razorpayClient.fetchSubscription(razorpaySubscriptionId);
       const payment = await razorpayClient.fetchPayment(razorpayPaymentId);
 
-      if (subscription.status === 'active') {
+      console.log('Subscription status:', subscription.status);
+      console.log('Payment status:', payment.status);
+
+      // Accept 'active' or 'authenticated' status (authenticated means first payment done, waiting for activation)
+      if (subscription.status === 'active' || subscription.status === 'authenticated') {
         // Update Firestore subscription
         const subscriptionRef = db
           .collection('users')
@@ -621,7 +641,7 @@ export const verifyRazorpayPayment = functions
         const planFeatures = getPlanFeatures(subscriptionData.planName);
         await db.collection('users').doc(userId).update({
           plan: subscriptionData.planName,
-          subscriptionStatus: 'active',
+          subscriptionStatus: subscription.status === 'active' ? 'active' : 'authenticated',
           subscriptionId: razorpaySubscriptionId,
           totalCredits: subscriptionData.totalCredits,
           creditsUsed: 0,
@@ -655,18 +675,31 @@ export const verifyRazorpayPayment = functions
 
         return {
           success: true,
-          status: 'active',
+          status: subscription.status,
           message: 'Subscription activated successfully',
         };
       }
 
+      // If subscription is in other status, log details
+      console.error('Subscription not active:', {
+        status: subscription.status,
+        subscriptionId: razorpaySubscriptionId,
+        paymentId: razorpayPaymentId,
+      });
+
       return {
         success: false,
         status: subscription.status,
-        message: 'Payment verification pending',
+        message: `Subscription status is ${subscription.status}. Expected 'active' or 'authenticated'.`,
       };
     } catch (error: any) {
       console.error('Verify payment error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        razorpaySubscriptionId,
+        razorpayPaymentId,
+      });
       throw new functions.https.HttpsError('internal', error.message);
     }
   });

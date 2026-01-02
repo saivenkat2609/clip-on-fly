@@ -14,7 +14,7 @@ export interface UserProfile {
 
   // Plan & Subscription
   plan: 'Free' | 'Starter' | 'Professional';
-  subscriptionStatus?: 'none' | 'active' | 'cancelled' | 'expired' | 'paused' | 'halted';
+  subscriptionStatus?: 'none' | 'active' | 'authenticated' | 'cancelled' | 'expired' | 'paused' | 'halted';
   subscriptionId?: string;
   razorpayCustomerId?: string;
   preferredCurrency?: 'INR' | 'USD';
