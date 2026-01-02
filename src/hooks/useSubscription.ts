@@ -4,10 +4,11 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, doc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db, functions } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { httpsCallable } from 'firebase/functions';
+import { getAuth } from 'firebase/auth';
 import type { PlanName, BillingPeriod, Currency } from '@/lib/pricing';
 
 export interface Subscription {
@@ -254,6 +255,7 @@ export function useTrackVideoUsage() {
 
 /**
  * UTILITY: Mark all existing videos as tracked (one-time migration)
+ * Uses direct Firestore access to avoid CORS issues
  */
 export function useMarkAllVideosAsTracked() {
   const queryClient = useQueryClient();
@@ -261,17 +263,50 @@ export function useMarkAllVideosAsTracked() {
   return useMutation({
     mutationFn: async () => {
       try {
-        const markVideos = httpsCallable(functions, 'markAllVideosAsTracked');
-        const result = await markVideos({});
-        console.log('[useMarkAllVideosAsTracked] Raw result:', result);
-        return result.data as {
-          success: boolean;
-          markedCount: number;
-          alreadyMarkedCount: number;
-          totalVideos: number;
+        const auth = getAuth();
+        const currentUser = auth.currentUser;
+
+        if (!currentUser) {
+          throw new Error('User must be authenticated');
+        }
+
+        const userId = currentUser.uid;
+        console.log('[useMarkAllVideosAsTracked] Starting for user:', userId);
+
+        const videosRef = collection(db, `users/${userId}/videos`);
+        const videosSnapshot = await getDocs(videosRef);
+
+        let markedCount = 0;
+        let alreadyMarkedCount = 0;
+
+        const batch = writeBatch(db);
+
+        videosSnapshot.docs.forEach((videoDoc) => {
+          const videoData = videoDoc.data();
+
+          if (!videoData.usageTracked) {
+            batch.update(videoDoc.ref, {
+              usageTracked: true,
+              usageTrackedAt: serverTimestamp(),
+            });
+            markedCount++;
+          } else {
+            alreadyMarkedCount++;
+          }
+        });
+
+        await batch.commit();
+
+        console.log('[useMarkAllVideosAsTracked] ✓ Marked videos:', { markedCount, alreadyMarkedCount });
+
+        return {
+          success: true,
+          markedCount,
+          alreadyMarkedCount,
+          totalVideos: videosSnapshot.size,
         };
       } catch (error: any) {
-        console.error('[useMarkAllVideosAsTracked] Function call error:', error);
+        console.error('[useMarkAllVideosAsTracked] Error:', error);
         throw error;
       }
     },
@@ -279,19 +314,15 @@ export function useMarkAllVideosAsTracked() {
       console.log('[useMarkAllVideosAsTracked] ✓ Videos marked:', data);
       queryClient.invalidateQueries({ queryKey: ['videos'] });
     },
-    onError: (error: any) => {
-      console.error('[useMarkAllVideosAsTracked] Error details:', {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        full: error,
-      });
+    onError: (error: any) {
+      console.error('[useMarkAllVideosAsTracked] Error details:', error);
     },
   });
 }
 
 /**
  * UTILITY: Reset credits to zero (for testing)
+ * Uses direct Firestore access to avoid CORS issues
  */
 export function useResetCreditsForTesting() {
   const queryClient = useQueryClient();
@@ -299,15 +330,29 @@ export function useResetCreditsForTesting() {
   return useMutation({
     mutationFn: async () => {
       try {
-        const resetCredits = httpsCallable(functions, 'resetCreditsForTesting');
-        const result = await resetCredits({});
-        console.log('[useResetCreditsForTesting] Raw result:', result);
-        return result.data as {
-          success: boolean;
-          message: string;
+        const auth = getAuth();
+        const currentUser = auth.currentUser;
+
+        if (!currentUser) {
+          throw new Error('User must be authenticated');
+        }
+
+        const userId = currentUser.uid;
+        console.log('[useResetCreditsForTesting] Resetting credits for user:', userId);
+
+        const userRef = doc(db, `users/${userId}`);
+        await updateDoc(userRef, {
+          creditsUsed: 0,
+        });
+
+        console.log('[useResetCreditsForTesting] ✓ Credits reset to 0');
+
+        return {
+          success: true,
+          message: 'Credits reset to 0',
         };
       } catch (error: any) {
-        console.error('[useResetCreditsForTesting] Function call error:', error);
+        console.error('[useResetCreditsForTesting] Error:', error);
         throw error;
       }
     },
@@ -315,7 +360,8 @@ export function useResetCreditsForTesting() {
       console.log('[useResetCreditsForTesting] ✓ Credits reset:', data);
 
       // Clear cache and force refetch
-      const currentUser = queryClient.getQueryData(['auth', 'currentUser']) as any;
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
       if (currentUser?.uid) {
         try {
           sessionStorage.removeItem(`user_profile_${currentUser.uid}`);
@@ -328,12 +374,7 @@ export function useResetCreditsForTesting() {
       queryClient.refetchQueries({ queryKey: ['userProfile'] });
     },
     onError: (error: any) => {
-      console.error('[useResetCreditsForTesting] Error details:', {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        full: error,
-      });
+      console.error('[useResetCreditsForTesting] Error details:', error);
     },
   });
 }
