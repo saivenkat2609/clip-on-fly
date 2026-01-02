@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, Zap, Calendar, Download } from "lucide-react";
+import { Check, Zap, Calendar, Download, AlertTriangle } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,6 +16,16 @@ import { UsageWarningBanner } from "@/components/UsageWarningBanner";
 import { PRICING, formatPrice, type Currency, type PlanName } from "@/lib/pricing";
 import { useToast } from "@/hooks/use-toast";
 import { loadRazorpayScript } from "@/lib/razorpay";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface VideoClip {
   clipIndex: number;
@@ -105,6 +115,8 @@ export default function Billing() {
   const currency: Currency = "INR"; // Fixed to INR only
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Use cached hooks
   const { plan: userPlan = "Free", totalCredits = 30, creditsUsed: userCreditsUsed = 0, creditsExpiryDate, subscriptionStatus } = useUserPlan();
@@ -168,32 +180,43 @@ export default function Billing() {
     setIsPaymentModalOpen(true);
   };
 
-  // Handle cancel subscription
-  const handleCancelSubscription = async () => {
+  // Handle cancel subscription - Open dialog
+  const handleCancelSubscription = () => {
+    if (!activeSubscription) return;
+    setIsCancelDialogOpen(true);
+  };
+
+  // Confirm cancellation
+  const confirmCancellation = async () => {
     if (!activeSubscription) return;
 
-    const confirmCancel = window.confirm(
-      'Are you sure you want to cancel your subscription? You will lose access to premium features at the end of your billing cycle.'
-    );
+    setIsCancelling(true);
 
-    if (confirmCancel) {
-      try {
-        await cancelSubscription.mutateAsync({
-          subscriptionId: activeSubscription.razorpaySubscriptionId,
-          cancelAtCycleEnd: true,
-        });
+    try {
+      await cancelSubscription.mutateAsync({
+        subscriptionId: activeSubscription.razorpaySubscriptionId,
+        cancelAtCycleEnd: true,
+      });
 
-        toast({
-          title: 'Subscription Cancelled',
-          description: 'Your subscription will be cancelled at the end of the billing period.',
-        });
-      } catch (error: any) {
-        toast({
-          title: 'Cancellation Failed',
-          description: error.message || 'Failed to cancel subscription. Please try again.',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Subscription Cancelled',
+        description: 'Your subscription will be cancelled at the end of the billing period. You will retain access until then.',
+      });
+
+      setIsCancelDialogOpen(false);
+
+      // Refresh page to update UI
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error: any) {
+      toast({
+        title: 'Cancellation Failed',
+        description: error.message || 'Failed to cancel subscription. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -300,7 +323,7 @@ export default function Billing() {
           <Card className="shadow-medium">
             <CardHeader>
               <CardTitle className="text-lg">
-                {userPlan === "Free" ? "Upgrade Plan" : "Next Billing"}
+                {userPlan === "Free" ? "Upgrade Plan" : activeSubscription?.cancelledAt ? "Subscription Ending" : "Next Billing"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -323,11 +346,28 @@ export default function Billing() {
                 </>
               ) : (
                 <>
+                  {activeSubscription?.cancelledAt && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
+                        <div className="text-sm">
+                          <p className="font-medium text-amber-900">Cancellation Scheduled</p>
+                          <p className="text-amber-700 mt-1">
+                            Your subscription will end on {creditsExpiry?.toLocaleDateString("en-US", {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric"
+                            })}. You'll have access until then.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3">
                     <Calendar className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">
-                        Next Billing Date
+                        {activeSubscription?.cancelledAt ? "Access Until" : "Next Billing Date"}
                       </p>
                       <p className="font-medium">
                         {creditsExpiry?.toLocaleDateString("en-US", {
@@ -355,13 +395,23 @@ export default function Billing() {
                     </div>
                   </div>
                   {subscriptionStatus === "active" && activeSubscription && (
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={handleCancelSubscription}
-                    >
-                      Cancel Subscription
-                    </Button>
+                    activeSubscription.cancelledAt ? (
+                      <Button
+                        variant="outline"
+                        className="w-full bg-amber-100 border-amber-600 text-amber-800 font-medium hover:bg-amber-100"
+                        disabled
+                      >
+                        Cancellation Scheduled
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleCancelSubscription}
+                      >
+                        Cancel Subscription
+                      </Button>
+                    )
                   )}
                 </>
               )}
@@ -435,17 +485,24 @@ export default function Billing() {
                   </div>
                   <Button
                     className={`w-full mb-6 ${
-                      plan.current
+                      plan.current || (plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional"))
                         ? "bg-muted text-muted-foreground cursor-default"
                         : plan.popular
                         ? "gradient-primary shadow-medium"
                         : "gradient-primary"
                     }`}
-                    disabled={plan.current}
+                    disabled={plan.current || (plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional"))}
                     onClick={() => handleUpgrade(plan)}
+                    title={
+                      plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional")
+                        ? "Cancel your current subscription to downgrade to Free plan"
+                        : undefined
+                    }
                   >
                     {plan.current
                       ? "Current Plan"
+                      : plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional")
+                      ? "Not Available"
                       : plan.name === "Free"
                       ? "Get Started"
                       : "Upgrade"}
@@ -592,6 +649,58 @@ export default function Billing() {
           currency={currency}
         />
       )}
+
+      {/* Cancel Subscription Dialog */}
+      <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              <AlertDialogTitle>Cancel Subscription</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="space-y-3 pt-2">
+              <p>
+                Are you sure you want to cancel your <strong>{userPlan}</strong> subscription?
+              </p>
+              <div className="bg-muted p-3 rounded-md space-y-2 text-sm">
+                <p className="font-medium text-foreground">What happens next:</p>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>Your subscription will be cancelled at the end of the current billing period</li>
+                  <li>You'll retain access to premium features until {creditsExpiry?.toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric"
+                  }) || "the end of your billing cycle"}</li>
+                  <li>After that, your account will be downgraded to the Free plan</li>
+                  <li>No further charges will be made</li>
+                </ul>
+              </div>
+              <p className="text-destructive font-medium">
+                This action cannot be undone.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCancelling}>
+              Keep Subscription
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCancellation}
+              disabled={isCancelling}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isCancelling ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Cancelling...
+                </>
+              ) : (
+                "Yes, Cancel Subscription"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

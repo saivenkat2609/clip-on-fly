@@ -9,6 +9,7 @@ import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { YouTubePostModal } from "@/components/YouTubePostModal";
 import { TemplateSelectionModal } from "@/components/TemplateSelectionModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTrackVideoUsage } from "@/hooks/useSubscription";
 import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette, RefreshCw, CheckCircle2, Circle, ArrowDownToLine, MessageSquare, Sparkles, Video, Edit3 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
@@ -75,6 +76,7 @@ interface Video {
   };
   clips?: VideoClip[];
   error?: string;
+  usageTracked?: boolean; // Flag to prevent double-charging credits
 }
 
 type FilterType = "all" | "liked" | "disliked" | "edited" | "short";
@@ -130,6 +132,10 @@ export default function ProjectDetails() {
 
   // Template reprocess hook
   const { reprocessClip, isReprocessing } = useTemplateReprocess();
+
+  // Track video usage hook
+  const trackVideoUsage = useTrackVideoUsage();
+  const [hasTrackedUsage, setHasTrackedUsage] = useState(false);
 
   // Real-time WebSocket updates for progress
   const wsEnabled = !!sessionId && (!video || video?.status === 'processing');
@@ -281,6 +287,56 @@ export default function ProjectDetails() {
       unsubscribe();
     };
   }, [currentUser, sessionId]);
+
+  // Track video usage when processing completes
+  useEffect(() => {
+    if (!video || !sessionId || !currentUser || hasTrackedUsage) return;
+
+    // Only track usage when video is completed and has duration
+    if (video.status === 'completed' && video.videoInfo?.duration) {
+      // Check if already tracked by looking for usageTracked flag from Firestore
+      if (video.usageTracked) {
+        console.log('[ProjectDetails] Usage already tracked for this video, skipping');
+        setHasTrackedUsage(true);
+        return;
+      }
+
+      console.log('[ProjectDetails] Video completed - tracking usage for', video.videoInfo.duration, 'seconds');
+
+      trackVideoUsage.mutate(
+        {
+          videoId: video.id,
+          sessionId: sessionId,
+          durationSeconds: video.videoInfo.duration,
+        },
+        {
+          onSuccess: (data: any) => {
+            console.log('[ProjectDetails] ✓ Usage tracked successfully:', data);
+            setHasTrackedUsage(true);
+
+            // Backend already marked video as tracked, show appropriate message
+            if (data.alreadyTracked) {
+              console.log('[ProjectDetails] Video was already tracked by backend');
+            } else {
+              const creditsDeducted = Math.ceil(video.videoInfo!.duration / 60);
+              toast.success(`${creditsDeducted} credits deducted`);
+            }
+
+            // Force immediate UI refresh by clearing cache and refetching
+            try {
+              sessionStorage.removeItem(`user_profile_${currentUser.uid}`);
+            } catch (error) {
+              console.error('Failed to clear profile cache:', error);
+            }
+          },
+          onError: (error: any) => {
+            console.error('[ProjectDetails] ✗ Failed to track usage:', error);
+            toast.error('Failed to deduct credits. Please contact support.');
+          },
+        }
+      );
+    }
+  }, [video, sessionId, currentUser, hasTrackedUsage, trackVideoUsage]);
 
   const formatDuration = (seconds?: number) => {
     if (!seconds) return "N/A";

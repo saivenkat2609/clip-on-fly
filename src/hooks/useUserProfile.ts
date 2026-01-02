@@ -80,16 +80,27 @@ export function useUserProfile() {
       if (!userId) return null;
 
       // Try sessionStorage first (instant, no API call)
-      try {
-        const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < SESSION_CACHE_TTL) {
-            return data as UserProfile;
+      // Skip cache if we just came from a payment (URL has payment success indicator)
+      const skipCache = window.location.search.includes('payment=success') ||
+                        sessionStorage.getItem('payment_just_completed') === 'true';
+
+      if (!skipCache) {
+        try {
+          const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
+          if (cached) {
+            const { data, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < SESSION_CACHE_TTL) {
+              return data as UserProfile;
+            }
           }
+        } catch (error) {
+          console.error('Failed to read cached profile:', error);
         }
-      } catch (error) {
-        console.error('Failed to read cached profile:', error);
+      }
+
+      // Clear payment flag after using it
+      if (skipCache) {
+        sessionStorage.removeItem('payment_just_completed');
       }
 
       // Only fetch from Firestore if cache miss

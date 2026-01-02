@@ -8,6 +8,7 @@ import { useCreateSubscription, useVerifyPayment } from '@/hooks/useSubscription
 import { openRazorpayCheckout } from '@/lib/razorpay';
 import { useToast } from '@/hooks/use-toast';
 import { formatPrice, type PlanName, type BillingPeriod, type Currency } from '@/lib/pricing';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export function PaymentModal({
 }: PaymentModalProps) {
   const { currentUser } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const createSubscription = useCreateSubscription();
@@ -91,7 +93,25 @@ export function PaymentModal({
                 description: 'Your subscription has been activated successfully.',
               });
 
-              // Force refresh to update UI
+              // CRITICAL: Clear all caches before reload to ensure fresh data
+              if (currentUser?.uid) {
+                // Clear sessionStorage cache
+                try {
+                  sessionStorage.removeItem(`user_profile_${currentUser.uid}`);
+                  // Set flag to skip cache on next load
+                  sessionStorage.setItem('payment_just_completed', 'true');
+                } catch (error) {
+                  console.error('Failed to clear session cache:', error);
+                }
+              }
+
+              // Clear React Query cache
+              queryClient.clear();
+
+              // Small delay to ensure cache is cleared
+              await new Promise(resolve => setTimeout(resolve, 100));
+
+              // Force refresh to update UI with fresh data
               window.location.reload();
             } else {
               toast({

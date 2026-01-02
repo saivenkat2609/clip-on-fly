@@ -821,6 +821,35 @@ export const trackVideoUsage = functions
     const durationMinutes = Math.ceil(durationSeconds / 60);
 
     try {
+      // CRITICAL FIX: Check if this video was already tracked to prevent double-charging
+      const videoRef = db.collection('users').doc(userId).collection('videos').doc(sessionId);
+      const videoDoc = await videoRef.get();
+
+      if (!videoDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Video not found');
+      }
+
+      const videoData = videoDoc.data();
+
+      // If already tracked, return early without charging again
+      if (videoData?.usageTracked === true) {
+        console.log(`[trackVideoUsage] Video ${sessionId} already tracked, skipping`);
+        const userDoc = await db.collection('users').doc(userId).get();
+        const userData = userDoc.data();
+        return {
+          success: true,
+          alreadyTracked: true,
+          creditsUsed: userData?.creditsUsed || 0,
+          creditsRemaining: (userData?.totalCredits || 0) - (userData?.creditsUsed || 0),
+        };
+      }
+
+      // Mark video as tracked IMMEDIATELY to prevent race conditions
+      await videoRef.update({
+        usageTracked: true,
+        usageTrackedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
       // Get user's current subscription
       const userDoc = await db.collection('users').doc(userId).get();
       const userData = userDoc.data();
@@ -844,6 +873,8 @@ export const trackVideoUsage = functions
       await db.collection('users').doc(userId).update({
         creditsUsed: admin.firestore.FieldValue.increment(durationMinutes),
       });
+
+      console.log(`[trackVideoUsage] ✓ Tracked ${durationMinutes} credits for video ${sessionId}`);
 
       // Update usage tracking
       const monthYear = new Date().toISOString().slice(0, 7);
@@ -923,6 +954,7 @@ export const trackVideoUsage = functions
 
       return {
         success: true,
+        alreadyTracked: false,
         creditsUsed: creditsUsed + durationMinutes,
         creditsRemaining: totalCredits - (creditsUsed + durationMinutes),
       };

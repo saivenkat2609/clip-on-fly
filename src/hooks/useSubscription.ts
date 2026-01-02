@@ -229,10 +229,7 @@ export function useTrackVideoUsage() {
       };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
-      queryClient.invalidateQueries({ queryKey: ['activeSubscription'] });
-
-      // Clear user profile cache
+      // Clear user profile cache first
       const currentUser = queryClient.getQueryData(['auth', 'currentUser']) as any;
       if (currentUser?.uid) {
         try {
@@ -241,6 +238,13 @@ export function useTrackVideoUsage() {
           console.error('Failed to clear profile cache:', error);
         }
       }
+
+      // Invalidate and refetch immediately
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.refetchQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['activeSubscription'] });
+
+      console.log('[useTrackVideoUsage] ✓ Cache cleared and profile refetched');
     },
     onError: (error: any) => {
       console.error('Track video usage error:', error);
