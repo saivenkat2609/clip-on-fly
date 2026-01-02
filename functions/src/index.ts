@@ -637,6 +637,7 @@ export const verifyRazorpayPayment = functions
           .add({
             razorpayPaymentId,
             razorpaySubscriptionId,
+            razorpayCustomerId: subscriptionData.razorpayCustomerId,
             razorpayInvoiceId: payment.invoice_id || null,
             userId,
             planName: subscriptionData.planName,
@@ -1035,6 +1036,7 @@ async function handleSubscriptionCharged(payment: any, subscription: any) {
     .add({
       razorpayPaymentId: payment.id,
       razorpaySubscriptionId: subscription.id,
+      razorpayCustomerId: subscriptionData.razorpayCustomerId,
       razorpayInvoiceId: payment.invoice_id,
       userId,
       planName: subscriptionData.planName,

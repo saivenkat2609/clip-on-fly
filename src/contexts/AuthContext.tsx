@@ -25,6 +25,7 @@ import { doc, setDoc, getDoc, serverTimestamp, collection, addDoc, query, where,
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ActivityTracker,
   INACTIVITY_TIMEOUT,
@@ -73,6 +74,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Activity tracking
   const activityTracker = useRef<ActivityTracker | null>(null);
@@ -391,6 +393,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   async function logout() {
+    // CRITICAL FIX: Clear all caches before signing out to prevent data leakage between users
+    if (currentUser?.uid) {
+      // Clear sessionStorage cache
+      try {
+        sessionStorage.removeItem(`user_profile_${currentUser.uid}`);
+      } catch (error) {
+        console.error('Failed to clear session cache:', error);
+      }
+    }
+
+    // Clear React Query cache
+    queryClient.clear();
+
     await signOut(auth);
     toast({
       title: 'Signed out',
