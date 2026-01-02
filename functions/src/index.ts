@@ -498,10 +498,41 @@ export const createRazorpaySubscription = functions
       .get();
 
     if (!existingSubscriptions.empty) {
-      throw new functions.https.HttpsError(
-        'already-exists',
-        `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
-      );
+      // Verify actual status from Razorpay (user may have cancelled in dashboard)
+      const existingSubDoc = existingSubscriptions.docs[0];
+      const existingSubData = existingSubDoc.data();
+
+      try {
+        const razorpayClient = new RazorpayClient(
+          razorpayKeyId.value(),
+          razorpayKeySecret.value(),
+          razorpayWebhookSecret.value()
+        );
+        const razorpaySub = await razorpayClient.fetchSubscription(existingSubData.razorpaySubscriptionId);
+
+        // Update Firestore with actual Razorpay status
+        if (razorpaySub.status === 'cancelled' || razorpaySub.status === 'completed' || razorpaySub.status === 'expired') {
+          await existingSubDoc.ref.update({
+            status: razorpaySub.status,
+            cancelledAt: razorpaySub.ended_at ? admin.firestore.Timestamp.fromMillis(razorpaySub.ended_at * 1000) : admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`Updated subscription ${existingSubData.razorpaySubscriptionId} status to ${razorpaySub.status}`);
+        } else {
+          // Still active in Razorpay, block duplicate
+          throw new functions.https.HttpsError(
+            'already-exists',
+            `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
+          );
+        }
+      } catch (error: any) {
+        // If Razorpay fetch fails, assume subscription is still active and block
+        console.error('Failed to verify subscription status from Razorpay:', error);
+        throw new functions.https.HttpsError(
+          'already-exists',
+          `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
+        );
+      }
     }
 
     // 4. Initialize Razorpay client
