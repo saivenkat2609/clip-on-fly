@@ -251,3 +251,67 @@ export function useTrackVideoUsage() {
     },
   });
 }
+
+/**
+ * UTILITY: Mark all existing videos as tracked (one-time migration)
+ */
+export function useMarkAllVideosAsTracked() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const markVideos = httpsCallable(functions, 'markAllVideosAsTracked');
+      const result = await markVideos({});
+      return result.data as {
+        success: boolean;
+        markedCount: number;
+        alreadyMarkedCount: number;
+        totalVideos: number;
+      };
+    },
+    onSuccess: (data) => {
+      console.log('[useMarkAllVideosAsTracked] ✓ Videos marked:', data);
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+    },
+    onError: (error: any) => {
+      console.error('[useMarkAllVideosAsTracked] Error:', error);
+    },
+  });
+}
+
+/**
+ * UTILITY: Reset credits to zero (for testing)
+ */
+export function useResetCreditsForTesting() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const resetCredits = httpsCallable(functions, 'resetCreditsForTesting');
+      const result = await resetCredits({});
+      return result.data as {
+        success: boolean;
+        message: string;
+      };
+    },
+    onSuccess: (data) => {
+      console.log('[useResetCreditsForTesting] ✓ Credits reset:', data);
+
+      // Clear cache and force refetch
+      const currentUser = queryClient.getQueryData(['auth', 'currentUser']) as any;
+      if (currentUser?.uid) {
+        try {
+          sessionStorage.removeItem(`user_profile_${currentUser.uid}`);
+        } catch (error) {
+          console.error('Failed to clear profile cache:', error);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.refetchQueries({ queryKey: ['userProfile'] });
+    },
+    onError: (error: any) => {
+      console.error('[useResetCreditsForTesting] Error:', error);
+    },
+  });
+}

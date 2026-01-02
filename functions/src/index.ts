@@ -965,6 +965,92 @@ export const trackVideoUsage = functions
   });
 
 /**
+ * UTILITY: Mark all existing videos as tracked (one-time migration)
+ * Call this once to prevent old videos from being re-tracked
+ */
+export const markAllVideosAsTracked = functions
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+
+    try {
+      console.log(`[markAllVideosAsTracked] Starting for user ${userId}`);
+
+      const videosSnapshot = await db
+        .collection('users')
+        .doc(userId)
+        .collection('videos')
+        .get();
+
+      let markedCount = 0;
+      let alreadyMarkedCount = 0;
+
+      const batch = db.batch();
+
+      videosSnapshot.docs.forEach((videoDoc) => {
+        const videoData = videoDoc.data();
+
+        if (!videoData.usageTracked) {
+          batch.update(videoDoc.ref, {
+            usageTracked: true,
+            usageTrackedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          markedCount++;
+        } else {
+          alreadyMarkedCount++;
+        }
+      });
+
+      await batch.commit();
+
+      console.log(`[markAllVideosAsTracked] ✓ Marked ${markedCount} videos, ${alreadyMarkedCount} already marked`);
+
+      return {
+        success: true,
+        markedCount,
+        alreadyMarkedCount,
+        totalVideos: videosSnapshot.size,
+      };
+    } catch (error: any) {
+      console.error('[markAllVideosAsTracked] Error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+/**
+ * UTILITY: Reset credits to zero (for testing)
+ */
+export const resetCreditsForTesting = functions
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+
+    try {
+      console.log(`[resetCreditsForTesting] Resetting credits for user ${userId}`);
+
+      await db.collection('users').doc(userId).update({
+        creditsUsed: 0,
+      });
+
+      console.log(`[resetCreditsForTesting] ✓ Credits reset to 0`);
+
+      return {
+        success: true,
+        message: 'Credits reset to 0',
+      };
+    } catch (error: any) {
+      console.error('[resetCreditsForTesting] Error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+/**
  * Step 5: Razorpay Webhook Handler
  * Processes subscription events from Razorpay
  */

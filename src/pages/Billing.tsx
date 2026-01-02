@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserPlan } from "@/hooks/useUserProfile";
 import { useVideos } from "@/hooks/useVideos";
-import { useActiveSubscription, useCancelSubscription } from "@/hooks/useSubscription";
+import { useActiveSubscription, useCancelSubscription, useMarkAllVideosAsTracked, useResetCreditsForTesting } from "@/hooks/useSubscription";
 import { useTransactions } from "@/hooks/useTransactions";
 import { PaymentModal } from "@/components/PaymentModal";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
@@ -124,6 +124,10 @@ export default function Billing() {
   const { data: activeSubscription } = useActiveSubscription();
   const { data: transactions = [] } = useTransactions();
   const cancelSubscription = useCancelSubscription();
+
+  // Developer utility hooks
+  const markAllVideosAsTracked = useMarkAllVideosAsTracked();
+  const resetCredits = useResetCreditsForTesting();
 
   // Preload Razorpay script on component mount for faster checkout
   useEffect(() => {
@@ -701,6 +705,99 @@ export default function Billing() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Developer Tools - FIX CREDIT TRACKING */}
+      <Card className="border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+        <CardHeader>
+          <CardTitle className="text-amber-900 dark:text-amber-400 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Developer Tools - Fix Credit Tracking
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              <strong>Issue:</strong> Old videos don't have the <code className="bg-amber-200 dark:bg-amber-900 px-1 rounded">usageTracked</code> flag, so credits are being deducted multiple times on page refresh.
+            </p>
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              <strong>Fix:</strong> Run these utilities in order:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Mark Videos as Tracked */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">Step 1: Mark All Videos</h4>
+              <p className="text-xs text-muted-foreground">
+                Marks all your existing videos as tracked to prevent future double-charging
+              </p>
+              <Button
+                onClick={() => {
+                  markAllVideosAsTracked.mutate(undefined, {
+                    onSuccess: (data) => {
+                      toast({
+                        title: 'Videos Marked Successfully',
+                        description: `Marked ${data.markedCount} videos. ${data.alreadyMarkedCount} were already marked.`,
+                      });
+                    },
+                    onError: (error: any) => {
+                      toast({
+                        title: 'Failed to Mark Videos',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    },
+                  });
+                }}
+                disabled={markAllVideosAsTracked.isPending}
+                className="w-full bg-amber-600 hover:bg-amber-700"
+              >
+                {markAllVideosAsTracked.isPending ? 'Marking...' : 'Mark All Videos as Tracked'}
+              </Button>
+            </div>
+
+            {/* Reset Credits */}
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">Step 2: Reset Credits</h4>
+              <p className="text-xs text-muted-foreground">
+                Resets your creditsUsed to 0. Upload fresh videos after this to test proper tracking.
+              </p>
+              <Button
+                onClick={() => {
+                  resetCredits.mutate(undefined, {
+                    onSuccess: (data) => {
+                      toast({
+                        title: 'Credits Reset Successfully',
+                        description: data.message,
+                      });
+                      // Force page reload to show updated credits
+                      setTimeout(() => window.location.reload(), 1000);
+                    },
+                    onError: (error: any) => {
+                      toast({
+                        title: 'Failed to Reset Credits',
+                        description: error.message,
+                        variant: 'destructive',
+                      });
+                    },
+                  });
+                }}
+                disabled={resetCredits.isPending}
+                variant="destructive"
+                className="w-full"
+              >
+                {resetCredits.isPending ? 'Resetting...' : 'Reset Credits to 0'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-amber-100 dark:bg-amber-900/40 p-3 rounded-md">
+            <p className="text-xs text-amber-900 dark:text-amber-200">
+              <strong>After running both steps:</strong> All existing videos will be marked as tracked, preventing future double-charging. Your credits will be reset to 0. You can then upload fresh videos to verify proper tracking (each video should only deduct credits once, even after page refresh).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </AppLayout>
   );
 }
