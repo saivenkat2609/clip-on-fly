@@ -3,10 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, Zap, Calendar, Download, AlertTriangle } from "lucide-react";
+import { PricingPlans } from "@/components/PricingPlans";
+import { Zap, Calendar, Download, AlertTriangle } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserPlanRealtime } from "@/hooks/useUserProfile";
 import { useVideos } from "@/hooks/useVideos";
 import { useActiveSubscription, useCancelSubscription, useMarkAllVideosAsTracked, useResetCreditsForTesting } from "@/hooks/useSubscription";
@@ -44,76 +44,12 @@ interface Video {
   };
 }
 
-const plansData = [
-  {
-    name: "Free",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    description: "Get started with video editing",
-    features: [
-      "30 minutes of upload per month",
-      "Up to 15 minute video length",
-      "720p exports",
-      "AI-powered clip generation",
-      "Auto captions",
-      "Basic templates",
-      "Watermarked exports",
-      "Community support"
-    ],
-    popular: false,
-    current: true
-  },
-  {
-    name: "Starter",
-    monthlyPrice: 149,
-    yearlyPrice: 1430, // ~20% discount (29 * 12 = 348, yearly = 279)
-    description: "Perfect for content creators",
-    features: [
-      "150 minutes of upload per month",
-      "Up to 30 minute video length",
-      "1080p HD exports",
-      "AI-powered clip generation",
-      "Advanced auto captions",
-      "Premium templates",
-      "No watermark",
-      "AI virality score",
-      "Multi-language support",
-      "Priority email support"
-    ],
-    popular: true,
-    current: false
-  },
-  {
-    name: "Professional",
-    monthlyPrice: 249,
-    yearlyPrice: 2390, // ~20% discount (79 * 12 = 948, yearly = 758)
-    description: "For serious creators & brands",
-    features: [
-      "350 minutes of upload per month",
-      "Up to 3 hour video length",
-      "4K exports",
-      "AI-powered clip generation",
-      "Advanced auto captions",
-      "All premium templates",
-      "No watermark",
-      "AI virality score",
-      "Multi-language support",
-      "Custom branding",
-      "Social media scheduler",
-      "AI title & description generation",
-      "Priority support with 24h response"
-    ],
-    popular: false,
-    current: false
-  }
-];
-
 export default function Billing() {
   const { currentUser } = useAuth();
   const { toast } = useToast();
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const currency: Currency = "INR"; // Fixed to INR only
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [selectedBillingPeriod, setSelectedBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -186,13 +122,16 @@ export default function Billing() {
   const usedCredits = userCreditsUsed;
 
   // Handle upgrade button click
-  const handleUpgrade = (plan: any) => {
+  const handleUpgrade = (plan: any, billingPeriod?: "monthly" | "yearly") => {
     if (plan.name === 'Free') {
       // Free plan doesn't need payment
       return;
     }
 
     setSelectedPlan(plan);
+    if (billingPeriod) {
+      setSelectedBillingPeriod(billingPeriod);
+    }
     setIsPaymentModalOpen(true);
   };
 
@@ -235,38 +174,6 @@ export default function Billing() {
       setIsCancelling(false);
     }
   };
-
-  // Generate plans with current pricing based on billing period and currency
-  const plans = plansData.map(plan => {
-    const isCurrent = plan.name === displayPlan;
-    const actualPrice = plan.monthlyPrice === 0
-      ? 0
-      : billingPeriod === "monthly"
-        ? (PRICING[plan.name as Exclude<PlanName, 'Free'>]?.monthly[currency] || plan.monthlyPrice)
-        : (PRICING[plan.name as Exclude<PlanName, 'Free'>]?.yearly[currency] || plan.yearlyPrice);
-
-    return {
-      ...plan,
-      current: isCurrent,
-      price:
-        plan.monthlyPrice === 0 ? "₹0" : formatPrice(actualPrice, currency),
-      period:
-        plan.monthlyPrice === 0
-          ? "/forever"
-          : billingPeriod === "monthly"
-          ? "/month"
-          : "/year",
-      savings:
-        billingPeriod === "yearly" && plan.monthlyPrice > 0
-          ? Math.round(
-              ((plan.monthlyPrice * 12 - plan.yearlyPrice) /
-                (plan.monthlyPrice * 12)) *
-                100
-            )
-          : 0,
-      actualAmount: actualPrice,
-    };
-  });
 
   return (
     <AppLayout>
@@ -437,107 +344,12 @@ export default function Billing() {
 
         {/* Available Plans */}
         <div id="available-plans">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-            <h2 className="text-2xl font-bold">Available Plans</h2>
-            <div className="flex gap-4">
-              {/* Billing Period Toggle */}
-              <Tabs
-                value={billingPeriod}
-                onValueChange={(value) =>
-                  setBillingPeriod(value as "monthly" | "yearly")
-                }
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="monthly">Monthly</TabsTrigger>
-                  <TabsTrigger value="yearly" className="relative">
-                    Yearly
-                    <Badge className="ml-2 bg-green-500 text-white text-[10px] px-1.5 py-0">
-                      Save 20%
-                    </Badge>
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {plans.map((plan) => (
-              <Card
-                key={plan.name}
-                className={`shadow-medium relative ${
-                  plan.current
-                    ? "border-primary border-2 shadow-glow"
-                    : plan.popular
-                    ? "border-primary border-2 shadow-glow scale-105"
-                    : ""
-                }`}
-              >
-                {plan.current && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-xs font-medium shadow-sm">
-                    Current Plan
-                  </div>
-                )}
-                {plan.popular && !plan.current && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 to-pink-500 text-white px-4 py-1 rounded-full text-xs font-medium shadow-sm">
-                    Most Popular
-                  </div>
-                )}
-                <CardContent className="p-6">
-                  <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-                  <p className="text-muted-foreground mb-4 text-sm">
-                    {plan.description}
-                  </p>
-                  <div className="mb-6">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold">{plan.price}</span>
-                      <span className="text-muted-foreground">
-                        {plan.period}
-                      </span>
-                    </div>
-                    {plan.savings > 0 && billingPeriod === "yearly" && (
-                      <p className="text-sm text-green-600 font-medium mt-2">
-                        Save {formatPrice(plan.monthlyPrice * 12 - plan.yearlyPrice, currency)} per year
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    className={`w-full mb-6 ${
-                      plan.current || (plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional"))
-                        ? "bg-muted text-muted-foreground cursor-default"
-                        : plan.popular
-                        ? "gradient-primary shadow-medium"
-                        : "gradient-primary"
-                    }`}
-                    disabled={plan.current || (plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional"))}
-                    onClick={() => handleUpgrade(plan)}
-                    title={
-                      plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional")
-                        ? "Cancel your current subscription to downgrade to Free plan"
-                        : undefined
-                    }
-                  >
-                    {plan.current
-                      ? "Current Plan"
-                      : plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional")
-                      ? "Not Available"
-                      : plan.name === "Free"
-                      ? "Get Started"
-                      : "Upgrade"}
-                  </Button>
-                  <ul className="space-y-3">
-                    {plan.features.map((feature, index) => (
-                      <li
-                        key={index}
-                        className="flex items-start gap-2 text-sm"
-                      >
-                        <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <PricingPlans
+            currentPlan={displayPlan}
+            onUpgrade={handleUpgrade}
+            showBillingToggle={true}
+            showCurrentPlanBadge={true}
+          />
         </div>
 
         {/* Billing History */}
@@ -660,7 +472,7 @@ export default function Billing() {
             setSelectedPlan(null);
           }}
           planName={selectedPlan.name as PlanName}
-          billingPeriod={billingPeriod}
+          billingPeriod={selectedBillingPeriod}
           amount={selectedPlan.actualAmount}
           currency={currency}
         />

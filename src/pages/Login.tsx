@@ -17,6 +17,7 @@ import { PasswordInput } from '@/components/PasswordInput';
 import { setSessionPersistence } from '@/lib/sessionManager';
 import { cn } from '@/lib/utils';
 import { AccountLinkingModal } from '@/components/AccountLinkingModal';
+import { LegalModal } from '@/components/LegalModal';
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -83,6 +84,12 @@ export default function Login() {
     pendingCredential: any;
   } | null>(null);
 
+  // Legal modal state
+  const [legalModal, setLegalModal] = useState<{
+    open: boolean;
+    type: 'terms' | 'privacy';
+  }>({ open: false, type: 'terms' });
+
   // Separate state for signup form
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
@@ -130,7 +137,14 @@ export default function Login() {
     // 2. User is authenticated
     // 3. Not currently processing a login/signup action
     if (!authLoading && currentUser && !googleLoading && !loading) {
-      navigate(from, { replace: true });
+      // Check if user should be redirected to billing (from landing page)
+      const shouldRedirectToBilling = sessionStorage.getItem('redirectToBilling');
+      if (shouldRedirectToBilling === 'true') {
+        sessionStorage.removeItem('redirectToBilling');
+        navigate('/billing', { replace: true });
+      } else {
+        navigate(from, { replace: true });
+      }
     }
   }, [currentUser, authLoading, googleLoading, loading, navigate, from]);
 
@@ -342,10 +356,19 @@ export default function Login() {
       // Reset failed attempts on successful login
       updateFailedAttempts(0);
 
-      toast({
-        title: 'Welcome back!',
-        description: 'You have successfully signed in.',
-      });
+      // Check if user should be redirected to billing
+      const shouldRedirectToBilling = sessionStorage.getItem('redirectToBilling');
+      if (shouldRedirectToBilling === 'true') {
+        toast({
+          title: 'Welcome back!',
+          description: 'Redirecting you to billing...',
+        });
+      } else {
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully signed in.',
+        });
+      }
       // Navigation handled by auto-redirect useEffect
     } catch (error: any) {
       // Check if account exists with Google only (MongoDB Atlas pattern)
@@ -423,10 +446,20 @@ export default function Login() {
       await setSessionPersistence(true);
 
       await signUp(signupEmail, signupPassword);
-      toast({
-        title: 'Account created successfully!',
-        description: 'Welcome to NebulaAI! A verification email has been sent to your inbox.',
-      });
+
+      // Check if user should be redirected to billing
+      const shouldRedirectToBilling = sessionStorage.getItem('redirectToBilling');
+      if (shouldRedirectToBilling === 'true') {
+        toast({
+          title: 'Account created successfully!',
+          description: 'Welcome to NebulaAI! Redirecting you to billing...',
+        });
+      } else {
+        toast({
+          title: 'Account created successfully!',
+          description: 'Welcome to NebulaAI! A verification email has been sent to your inbox.',
+        });
+      }
       // Navigation handled by auto-redirect useEffect
     } catch (error: any) {
       // Check for provider conflicts (MongoDB Atlas pattern)
@@ -496,6 +529,12 @@ export default function Login() {
 
       // Try to sign in with Google, with credential return on conflict
       await signInWithGoogle({ returnCredentialOnConflict: true });
+
+      // Check if user should be redirected to billing
+      const shouldRedirectToBilling = sessionStorage.getItem('redirectToBilling');
+      if (shouldRedirectToBilling === 'true') {
+        // Don't show toast here - auto-redirect will handle it
+      }
       // Navigation handled by auto-redirect useEffect
     } catch (error: any) {
       // Check if it's a provider conflict error that we can link
@@ -924,8 +963,23 @@ export default function Login() {
             </div>
             {isSignUp && (
               <p className="text-xs text-muted-foreground text-center">
-                By signing up, you agree to our Terms of Service and Privacy Policy.
-                We do not accept temporary or disposable email addresses.
+                By signing up, you agree to our{' '}
+                <button
+                  type="button"
+                  onClick={() => setLegalModal({ open: true, type: 'terms' })}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Terms of Service
+                </button>
+                {' '}and{' '}
+                <button
+                  type="button"
+                  onClick={() => setLegalModal({ open: true, type: 'privacy' })}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Privacy Policy
+                </button>
+                . We do not accept temporary or disposable email addresses.
               </p>
             )}
           </CardFooter>
@@ -945,6 +999,13 @@ export default function Login() {
           loading={googleLoading}
         />
       )}
+
+      {/* Legal Modal (Terms & Privacy) */}
+      <LegalModal
+        open={legalModal.open}
+        onOpenChange={(open) => setLegalModal({ ...legalModal, open })}
+        type={legalModal.type}
+      />
     </div>
   );
 }

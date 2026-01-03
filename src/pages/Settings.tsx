@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Bell, Key, Users, Palette, Mail, Lock, Shield, CheckCircle2, AlertCircle, Share2, Check, Link as LinkIcon } from "lucide-react";
+import { User, Bell, Key, Users, Palette, Mail, Lock, Shield, CheckCircle2, AlertCircle, Share2, Check, Link as LinkIcon, Crown } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { updateProfile, fetchSignInMethodsForEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
-import { useUserProfile, refreshUserProfile } from "@/hooks/useUserProfile";
+import { useUserProfile, refreshUserProfile, useUserProfileRealtime } from "@/hooks/useUserProfile";
 
 export default function Settings() {
   const { theme, mode, setTheme, setMode } = useTheme();
@@ -81,6 +81,10 @@ export default function Settings() {
 
   // Use cached user profile hook
   const { data: profile, isLoading: profileDataLoading } = useUserProfile();
+
+  // Check if user is admin for theme access
+  const { data: realtimeProfile } = useUserProfileRealtime();
+  const isAdmin = realtimeProfile?.role === 'admin';
 
   // Load user profile data from cached hook
   useEffect(() => {
@@ -396,50 +400,53 @@ export default function Settings() {
   const connectedMethodsCount = (linkedProviders.google ? 1 : 0) + (linkedProviders.password ? 1 : 0);
   const hasOnlyOneMethod = connectedMethodsCount === 1;
 
-  const themes = [
+  const allThemes = [
     {
       id: "indigo",
       name: "Indigo",
-      colors: ["hsl(250 80% 60%)", "hsl(280 70% 65%)", "hsl(35 100% 60%)"],
-      hoverBg: "hsl(250 80% 60% / 0.1)",
-      hoverBorder: "hsl(250 80% 60% / 0.3)"
+      color: "hsl(250 80% 60%)",
+      gradient: "linear-gradient(135deg, hsl(250 80% 60%) 0%, hsl(250 85% 50%) 100%)",
+      adminOnly: false,
     },
     {
       id: "ocean",
       name: "Ocean",
-      colors: ["hsl(200 90% 50%)", "hsl(220 80% 55%)", "hsl(180 100% 45%)"],
-      hoverBg: "hsl(200 90% 50% / 0.1)",
-      hoverBorder: "hsl(200 90% 50% / 0.3)"
-    },
-    {
-      id: "sunset",
-      name: "Sunset",
-      colors: ["hsl(15 95% 60%)", "hsl(340 100% 60%)", "hsl(30 100% 60%)"],
-      hoverBg: "hsl(15 95% 60% / 0.1)",
-      hoverBorder: "hsl(15 95% 60% / 0.3)"
-    },
-    {
-      id: "forest",
-      name: "Forest",
-      colors: ["hsl(150 70% 45%)", "hsl(130 65% 50%)", "hsl(80 100% 50%)"],
-      hoverBg: "hsl(150 70% 45% / 0.1)",
-      hoverBorder: "hsl(150 70% 45% / 0.3)"
-    },
-    {
-      id: "cyber",
-      name: "Cyber",
-      colors: ["hsl(280 100% 60%)", "hsl(300 90% 65%)", "hsl(170 100% 50%)"],
-      hoverBg: "hsl(280 100% 60% / 0.1)",
-      hoverBorder: "hsl(280 100% 60% / 0.3)"
+      color: "hsl(200 95% 55%)",
+      gradient: "linear-gradient(135deg, hsl(200 95% 55%) 0%, hsl(200 98% 48%) 100%)",
+      adminOnly: false,
     },
     {
       id: "rose",
       name: "Rose",
-      colors: ["hsl(330 80% 60%)", "hsl(310 75% 65%)", "hsl(20 100% 65%)"],
-      hoverBg: "hsl(330 80% 60% / 0.1)",
-      hoverBorder: "hsl(330 80% 60% / 0.3)"
+      color: "hsl(330 85% 65%)",
+      gradient: "linear-gradient(135deg, hsl(330 85% 65%) 0%, hsl(330 90% 55%) 100%)",
+      adminOnly: false,
+    },
+    {
+      id: "sunset",
+      name: "Sunset",
+      color: "hsl(25 95% 60%)",
+      gradient: "linear-gradient(135deg, hsl(25 95% 60%) 0%, hsl(25 98% 50%) 100%)",
+      adminOnly: true,
+    },
+    {
+      id: "forest",
+      name: "Forest",
+      color: "hsl(150 75% 50%)",
+      gradient: "linear-gradient(135deg, hsl(150 75% 50%) 0%, hsl(150 80% 40%) 100%)",
+      adminOnly: true,
+    },
+    {
+      id: "cyber",
+      name: "Cyber",
+      color: "hsl(280 95% 65%)",
+      gradient: "linear-gradient(135deg, hsl(280 95% 65%) 0%, hsl(280 98% 55%) 100%)",
+      adminOnly: true,
     },
   ];
+
+  // Filter themes based on admin status
+  const themes = allThemes.filter(t => !t.adminOnly || isAdmin);
 
   return (
     <AppLayout>
@@ -451,18 +458,27 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 mb-8">
-            <TabsTrigger value="profile">
-              <User className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Profile</span>
+          <TabsList className="grid w-full grid-cols-3 mb-8 h-12 bg-muted/70">
+            <TabsTrigger
+              value="profile"
+              className="gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm font-medium"
+            >
+              <User className="h-4 w-4" />
+              <span>Profile</span>
             </TabsTrigger>
-            <TabsTrigger value="appearance">
-              <Palette className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Theme</span>
+            <TabsTrigger
+              value="appearance"
+              className="gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm font-medium"
+            >
+              <Palette className="h-4 w-4" />
+              <span>Theme</span>
             </TabsTrigger>
-            <TabsTrigger value="social">
-              <Share2 className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Social</span>
+            <TabsTrigger
+              value="social"
+              className="gap-2 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm font-medium"
+            >
+              <Share2 className="h-4 w-4" />
+              <span>Social</span>
             </TabsTrigger>
           </TabsList>
 
@@ -552,38 +568,58 @@ export default function Settings() {
                     className="grid grid-cols-2 md:grid-cols-3 gap-4"
                   >
                     {themes.map((t) => (
-                      <div key={t.id} className="relative group">
+                      <div key={t.id} className="relative">
                         <Label
                           htmlFor={t.id}
                           className={cn(
-                            "flex flex-col items-center justify-between rounded-lg border-2 p-4 cursor-pointer transition-all relative",
+                            "relative flex items-center justify-center gap-2 rounded-lg px-4 py-3 cursor-pointer transition-all",
                             theme === t.id
-                              ? "border-primary bg-primary/5 shadow-sm"
-                              : "border-border bg-card hover:border-primary/30 hover:bg-primary/5"
+                              ? "shadow-sm"
+                              : "hover:shadow-sm"
                           )}
+                          style={{
+                            backgroundColor: t.color.replace('hsl(', 'hsl(').replace(')', ' / 0.1)'),
+                            color: t.color,
+                          }}
                         >
                           <RadioGroupItem value={t.id} id={t.id} className="sr-only" />
+
+                          {/* Selected checkmark - top right like Mode */}
                           {theme === t.id && (
-                            <div className="absolute top-3 right-3 h-5 w-5 rounded-full bg-primary flex items-center justify-center z-10">
-                              <Check className="h-3 w-3 text-primary-foreground" />
+                            <div
+                              className="absolute top-2 right-2 h-5 w-5 rounded-full flex items-center justify-center"
+                              style={{ backgroundColor: t.color }}
+                            >
+                              <Check className="h-3 w-3 text-white" />
                             </div>
                           )}
-                          <div className="space-y-3 w-full">
-                            <div className="flex gap-1.5 justify-center">
-                              {t.colors.map((color, i) => (
-                                <div
-                                  key={i}
-                                  className="h-8 w-8 rounded-full shadow-soft ring-1 ring-black/5"
-                                  style={{ backgroundColor: color }}
-                                />
-                              ))}
-                            </div>
-                            <div className="text-center font-medium">{t.name}</div>
-                          </div>
+
+                          {/* Theme name - always centered */}
+                          <span className={cn(
+                            "font-semibold text-base transition-colors",
+                            theme === t.id ? "font-bold" : ""
+                          )}>
+                            {t.name}
+                          </span>
+
+                          {/* Admin badge */}
+                          {t.adminOnly && (
+                            <Crown className="h-4 w-4" />
+                          )}
                         </Label>
                       </div>
                     ))}
                   </RadioGroup>
+
+                  {/* Info text */}
+                  <div className="mt-4 text-center">
+                    {!isAdmin && (
+                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                        <Crown className="h-3 w-3" />
+                        Additional themes available for admin users
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex justify-end pt-4 border-t border-border">
