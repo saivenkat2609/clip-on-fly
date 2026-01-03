@@ -1368,3 +1368,62 @@ async function handlePaymentFailed(payment: any) {
   console.error('Payment failed:', payment.id, payment.error_description);
   // TODO: Send notification to user about failed payment
 }
+
+/**
+ * Admin Function: Get All Users
+ * Fetches all users for admin dashboard
+ * Only accessible by users with role='admin'
+ */
+export const getAllUsers = functions
+  .https.onCall(async (data, context) => {
+    // Check authentication
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+
+    try {
+      // Check if user is admin
+      const userDoc = await db.collection('users').doc(userId).get();
+      const userData = userDoc.data();
+
+      if (!userData || userData.role !== 'admin') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Only admin users can access this function'
+        );
+      }
+
+      console.log(`[getAllUsers] Admin ${userId} requesting all users`);
+
+      // Fetch all users (Admin SDK bypasses security rules)
+      const usersSnapshot = await db.collection('users')
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const users = usersSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          uid: doc.id,
+          email: data.email || '',
+          displayName: data.displayName || 'Unknown User',
+          plan: data.plan || 'Free',
+          totalCredits: data.totalCredits || 0,
+          creditsUsed: data.creditsUsed || 0,
+          subscriptionStatus: data.subscriptionStatus || 'none',
+          createdAt: data.createdAt || null,
+        };
+      });
+
+      console.log(`[getAllUsers] Successfully fetched ${users.length} users`);
+
+      return {
+        success: true,
+        users: users,
+      };
+    } catch (error: any) {
+      console.error('[getAllUsers] Error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });

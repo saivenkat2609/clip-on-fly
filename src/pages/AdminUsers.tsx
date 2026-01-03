@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { app } from "@/lib/firebase";
 import { useUserProfileRealtime } from "@/hooks/useUserProfile";
 import { useNavigate } from "react-router-dom";
 import { Users, Crown, AlertCircle, Search, Filter } from "lucide-react";
@@ -57,7 +57,7 @@ export default function AdminUsers() {
     }
   }, [userProfile, isAdmin, navigate]);
 
-  // Fetch all users
+  // Fetch all users via Cloud Function
   useEffect(() => {
     if (!isAdmin) return;
 
@@ -66,30 +66,19 @@ export default function AdminUsers() {
         setLoading(true);
         setError("");
 
-        console.log('[AdminUsers] Fetching users from Firestore...');
-        const usersRef = collection(db, 'users');
-        const usersQuery = query(usersRef, orderBy('createdAt', 'desc'));
+        console.log('[AdminUsers] Fetching users via Cloud Function...');
 
-        console.log('[AdminUsers] Executing query...');
-        const usersSnapshot = await getDocs(usersQuery);
-        console.log('[AdminUsers] Fetched', usersSnapshot.size, 'users');
+        const functions = getFunctions(app);
+        const getAllUsersFunction = httpsCallable(functions, 'getAllUsers');
 
-        const usersData: UserData[] = usersSnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            uid: doc.id,
-            email: data.email || '',
-            displayName: data.displayName || 'Unknown User',
-            plan: data.plan || 'Free',
-            totalCredits: data.totalCredits || 0,
-            creditsUsed: data.creditsUsed || 0,
-            subscriptionStatus: data.subscriptionStatus || 'none',
-            createdAt: data.createdAt,
-          };
-        });
+        console.log('[AdminUsers] Calling getAllUsers function...');
+        const result = await getAllUsersFunction();
+        const data = result.data as { success: boolean; users: UserData[] };
 
-        console.log('[AdminUsers] Successfully loaded users:', usersData);
-        setUsers(usersData);
+        console.log('[AdminUsers] Fetched', data.users.length, 'users');
+        console.log('[AdminUsers] Successfully loaded users:', data.users);
+
+        setUsers(data.users);
       } catch (err: any) {
         console.error('[AdminUsers] Error fetching users:', err);
         console.error('[AdminUsers] Error code:', err.code);
@@ -97,7 +86,9 @@ export default function AdminUsers() {
 
         // Provide more detailed error message
         if (err.code === 'permission-denied') {
-          setError('Permission denied. Please ensure you have admin access and Firestore security rules allow reading users collection.');
+          setError('Permission denied. You must be an admin to access this page.');
+        } else if (err.code === 'unauthenticated') {
+          setError('You must be logged in to access this page.');
         } else {
           setError(`Failed to load users: ${err.message || 'Unknown error'}`);
         }
