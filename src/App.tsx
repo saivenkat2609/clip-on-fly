@@ -20,6 +20,7 @@ import Templates from "./pages/Templates";
 import Billing from "./pages/Billing";
 import Settings from "./pages/Settings";
 import YouTubeCallback from "./pages/YouTubeCallback";
+import AdminUsers from "./pages/AdminUsers";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
@@ -76,6 +77,7 @@ const App = () => (
               <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
               <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
               <Route path="/auth/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

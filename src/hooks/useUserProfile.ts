@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from 'react';
 
 export interface UserProfile {
   uid: string;
@@ -38,6 +39,9 @@ export interface UserProfile {
   theme: string;
   mode: string;
   company: string;
+
+  // Role
+  role?: 'user' | 'admin';
 
   // Statistics
   totalVideos: number;
@@ -157,6 +161,56 @@ export function useUserProfile() {
 }
 
 /**
+ * Real-time listener for user profile - USE THIS FOR CREDITS
+ * Updates immediately when credits change in Firestore
+ */
+export function useUserProfileRealtime() {
+  const { currentUser } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setProfile(null);
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[useUserProfileRealtime] Setting up real-time listener for user:', currentUser.uid);
+
+    const userDocRef = doc(db, 'users', currentUser.uid);
+
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as UserProfile;
+          console.log('[useUserProfileRealtime] Profile updated:', {
+            creditsUsed: data.creditsUsed,
+            totalCredits: data.totalCredits,
+          });
+          setProfile(data);
+        } else {
+          setProfile(null);
+        }
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('[useUserProfileRealtime] Listener error:', error);
+        setIsLoading(false);
+      }
+    );
+
+    return () => {
+      console.log('[useUserProfileRealtime] Cleaning up listener');
+      unsubscribe();
+    };
+  }, [currentUser?.uid]);
+
+  return { data: profile, isLoading };
+}
+
+/**
  * Hook to get specific user plan data
  */
 export function useUserPlan() {
@@ -164,6 +218,22 @@ export function useUserPlan() {
 
   return {
     ...rest,
+    plan: profile?.plan || 'Free',
+    totalCredits: profile?.totalCredits || 30,
+    creditsUsed: profile?.creditsUsed || 0,
+    creditsExpiryDate: profile?.creditsExpiryDate,
+    subscriptionStatus: profile?.subscriptionStatus,
+  };
+}
+
+/**
+ * Real-time hook for user plan data - UPDATES IMMEDIATELY
+ */
+export function useUserPlanRealtime() {
+  const { data: profile, isLoading } = useUserProfileRealtime();
+
+  return {
+    isLoading,
     plan: profile?.plan || 'Free',
     totalCredits: profile?.totalCredits || 30,
     creditsUsed: profile?.creditsUsed || 0,

@@ -7,7 +7,7 @@ import { Check, Zap, Calendar, Download, AlertTriangle } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useUserPlan } from "@/hooks/useUserProfile";
+import { useUserPlanRealtime } from "@/hooks/useUserProfile";
 import { useVideos } from "@/hooks/useVideos";
 import { useActiveSubscription, useCancelSubscription, useMarkAllVideosAsTracked, useResetCreditsForTesting } from "@/hooks/useSubscription";
 import { useTransactions } from "@/hooks/useTransactions";
@@ -118,8 +118,8 @@ export default function Billing() {
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  // Use cached hooks
-  const { plan: userPlan = "Free", totalCredits = 30, creditsUsed: userCreditsUsed = 0, creditsExpiryDate, subscriptionStatus } = useUserPlan();
+  // Use real-time hooks for credits to update immediately
+  const { plan: userPlan = "Free", totalCredits = 30, creditsUsed: userCreditsUsed = 0, creditsExpiryDate, subscriptionStatus } = useUserPlanRealtime();
   const { data: videos = [] } = useVideos();
   const { data: activeSubscription } = useActiveSubscription();
   const { data: transactions = [] } = useTransactions();
@@ -156,6 +156,18 @@ export default function Billing() {
 
     return null;
   }, [creditsExpiryDate]);
+
+  // Check if subscription has expired
+  const isSubscriptionExpired = useMemo(() => {
+    if (!creditsExpiry || userPlan === 'Free') return false;
+    return creditsExpiry < new Date();
+  }, [creditsExpiry, userPlan]);
+
+  // Display plan - show "Free" if subscription expired
+  const displayPlan = isSubscriptionExpired ? 'Free' : userPlan;
+
+  // Hide cancellation warning if subscription expired
+  const shouldShowCancellationWarning = !isSubscriptionExpired && activeSubscription?.cancelledAt;
 
   // Calculate stats from videos - memoized for performance
   const { projectsCount, clipsCount } = useMemo(() => {
@@ -226,7 +238,7 @@ export default function Billing() {
 
   // Generate plans with current pricing based on billing period and currency
   const plans = plansData.map(plan => {
-    const isCurrent = plan.name === userPlan;
+    const isCurrent = plan.name === displayPlan;
     const actualPrice = plan.monthlyPrice === 0
       ? 0
       : billingPeriod === "monthly"
@@ -277,7 +289,7 @@ export default function Billing() {
               <CardTitle className="flex items-center justify-between">
                 <span>Usage This Month</span>
                 <Badge className="bg-primary text-primary-foreground">
-                  {userPlan}
+                  {displayPlan}
                 </Badge>
               </CardTitle>
             </CardHeader>
@@ -327,11 +339,11 @@ export default function Billing() {
           <Card className="shadow-medium">
             <CardHeader>
               <CardTitle className="text-lg">
-                {userPlan === "Free" ? "Upgrade Plan" : activeSubscription?.cancelledAt ? "Subscription Ending" : "Next Billing"}
+                {displayPlan === "Free" ? "Upgrade Plan" : shouldShowCancellationWarning ? "Subscription Ending" : "Next Billing"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {userPlan === "Free" ? (
+              {displayPlan === "Free" ? (
                 <>
                   <p className="text-sm text-muted-foreground">
                     You're on the Free plan. Upgrade to unlock more features and
@@ -350,7 +362,7 @@ export default function Billing() {
                 </>
               ) : (
                 <>
-                  {activeSubscription?.cancelledAt && (
+                  {shouldShowCancellationWarning && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
@@ -371,7 +383,7 @@ export default function Billing() {
                     <Calendar className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">
-                        {activeSubscription?.cancelledAt ? "Access Until" : "Next Billing Date"}
+                        {shouldShowCancellationWarning ? "Access Until" : "Next Billing Date"}
                       </p>
                       <p className="font-medium">
                         {creditsExpiry?.toLocaleDateString("en-US", {
@@ -398,8 +410,8 @@ export default function Billing() {
                       </p>
                     </div>
                   </div>
-                  {subscriptionStatus === "active" && activeSubscription && (
-                    activeSubscription.cancelledAt ? (
+                  {subscriptionStatus === "active" && activeSubscription && !isSubscriptionExpired && (
+                    shouldShowCancellationWarning ? (
                       <Button
                         variant="outline"
                         className="w-full bg-amber-100 border-amber-600 text-amber-800 font-medium hover:bg-amber-100"
@@ -489,23 +501,23 @@ export default function Billing() {
                   </div>
                   <Button
                     className={`w-full mb-6 ${
-                      plan.current || (plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional"))
+                      plan.current || (plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional"))
                         ? "bg-muted text-muted-foreground cursor-default"
                         : plan.popular
                         ? "gradient-primary shadow-medium"
                         : "gradient-primary"
                     }`}
-                    disabled={plan.current || (plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional"))}
+                    disabled={plan.current || (plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional"))}
                     onClick={() => handleUpgrade(plan)}
                     title={
-                      plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional")
+                      plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional")
                         ? "Cancel your current subscription to downgrade to Free plan"
                         : undefined
                     }
                   >
                     {plan.current
                       ? "Current Plan"
-                      : plan.name === "Free" && (userPlan === "Starter" || userPlan === "Professional")
+                      : plan.name === "Free" && (displayPlan === "Starter" || displayPlan === "Professional")
                       ? "Not Available"
                       : plan.name === "Free"
                       ? "Get Started"
@@ -540,7 +552,7 @@ export default function Billing() {
                   No billing history yet
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {userPlan === "Free"
+                  {displayPlan === "Free"
                     ? "You're currently on the Free plan. Upgrade to access premium features."
                     : "Your transaction history will appear here once you make a payment."}
                 </p>
@@ -664,7 +676,7 @@ export default function Billing() {
             </div>
             <AlertDialogDescription className="space-y-3 pt-2">
               <p>
-                Are you sure you want to cancel your <strong>{userPlan}</strong> subscription?
+                Are you sure you want to cancel your <strong>{displayPlan}</strong> subscription?
               </p>
               <div className="bg-muted p-3 rounded-md space-y-2 text-sm">
                 <p className="font-medium text-foreground">What happens next:</p>

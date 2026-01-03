@@ -1,12 +1,33 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useUserPlan } from '@/hooks/useUserProfile';
+import { useUserPlanRealtime } from '@/hooks/useUserProfile';
 import { useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
 
 export function UsageWarningBanner() {
   const navigate = useNavigate();
-  const { plan, totalCredits, creditsUsed = 0 } = useUserPlan();
+  const { plan, totalCredits, creditsUsed = 0, creditsExpiryDate } = useUserPlanRealtime();
+
+  // Check if subscription has expired
+  const creditsExpiry = useMemo(() => {
+    if (!creditsExpiryDate) return null;
+    if (creditsExpiryDate?.toDate) {
+      return creditsExpiryDate.toDate();
+    }
+    if (typeof creditsExpiryDate === 'string') {
+      return new Date(creditsExpiryDate);
+    }
+    return null;
+  }, [creditsExpiryDate]);
+
+  const isSubscriptionExpired = useMemo(() => {
+    if (!creditsExpiry || plan === 'Free') return false;
+    return creditsExpiry < new Date();
+  }, [creditsExpiry, plan]);
+
+  // Display plan - show "Free" if subscription expired
+  const displayPlan = isSubscriptionExpired ? 'Free' : plan;
 
   // Use backend creditsUsed value (tracked in Firestore)
   const usagePercentage = totalCredits > 0 ? (creditsUsed / totalCredits) * 100 : 0;
@@ -46,7 +67,7 @@ export function UsageWarningBanner() {
       <AlertTitle>{getTitle()}</AlertTitle>
       <AlertDescription className="flex items-center justify-between">
         <span className="flex-1">{getMessage()}</span>
-        {plan === 'Free' && (
+        {displayPlan === 'Free' && (
           <Button
             variant={usagePercentage >= 90 ? 'default' : 'outline'}
             size="sm"

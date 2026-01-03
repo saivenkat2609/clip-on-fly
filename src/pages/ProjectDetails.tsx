@@ -165,7 +165,7 @@ export default function ProjectDetails() {
       });
     },
     onError: (data) => {
-      console.error('[ProjectDetails] ❌ WebSocket: Error received', data);
+      console.error('[ProjectDetails] WebSocket: Error received', data);
     }
   });
 
@@ -259,7 +259,7 @@ export default function ProjectDetails() {
 
           // Show toast and confetti when clips are first added
           if (currentClipsCount > 0 && previousClipsCount === 0) {
-            console.log(`[ProjectDetails] ✓ Clips loaded! Showing ${currentClipsCount} clips`);
+            console.log(`[ProjectDetails] Clips loaded! Showing ${currentClipsCount} clips`);
             toast.success(`Processing complete! ${currentClipsCount} clips generated`);
             // Celebrate with confetti!
             setTimeout(() => celebrateSuccess(), 500);
@@ -303,7 +303,7 @@ export default function ProjectDetails() {
 
     // Mark as in progress IMMEDIATELY to prevent race conditions
     trackingInProgressRef.current = true;
-    console.log('[ProjectDetails] 🎯 Starting credit tracking for', video.videoInfo.duration, 'seconds');
+    console.log('[ProjectDetails] Starting credit tracking for', video.videoInfo.duration, 'seconds');
 
     trackVideoUsage.mutate(
       {
@@ -313,7 +313,7 @@ export default function ProjectDetails() {
       },
       {
         onSuccess: (data: any) => {
-          console.log('[ProjectDetails] ✅ Usage tracked successfully:', data);
+          console.log('[ProjectDetails] Usage tracked successfully:', data);
           hasTrackedUsageRef.current = true;
           trackingInProgressRef.current = false;
 
@@ -330,7 +330,7 @@ export default function ProjectDetails() {
           }
         },
         onError: (error: any) => {
-          console.error('[ProjectDetails] ❌ Failed to track usage:', error);
+          console.error('[ProjectDetails] Failed to track usage:', error);
           trackingInProgressRef.current = false;
           toast.error('Failed to deduct credits. Please contact support.');
         },
@@ -451,7 +451,7 @@ export default function ProjectDetails() {
         // Force immediate UI update with new video and template name
         setVideo({ ...video, clips: updatedClips });
 
-        console.log('[ProjectDetails] ✅ UI updated with new video URL and template:', result.template_name);
+        console.log('[ProjectDetails] UI updated with new video URL and template:', result.template_name);
       }
     } catch (err) {
       console.error("Error applying template:", err);
