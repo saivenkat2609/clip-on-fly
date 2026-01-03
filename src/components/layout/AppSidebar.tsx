@@ -1,7 +1,8 @@
-import { Home, Upload, Layout, CreditCard, Settings, Sparkles, LogOut, User, FolderOpen } from "lucide-react";
+import { Home, Upload, Layout, CreditCard, Settings, Sparkles, LogOut, User, FolderOpen, Users } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useMemo } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,8 +25,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserProfileRealtime } from "@/hooks/useUserProfile";
 
-const menuItems = [
+const baseMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Upload", url: "/upload", icon: Upload },
   { title: "Projects", url: "/projects", icon: FolderOpen },
@@ -34,12 +36,35 @@ const menuItems = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
+const adminMenuItem = {
+  title: "Users",
+  url: "/admin/users",
+  icon: Users,
+};
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const { data: userProfile } = useUserProfileRealtime();
   const isCollapsed = state === "collapsed";
+
+  // Check if user is admin
+  const isAdmin = userProfile?.role === 'admin';
+
+  // Build menu items based on user role
+  const menuItems = useMemo(() => {
+    if (isAdmin) {
+      // Insert admin menu item after Dashboard (at index 1)
+      return [
+        baseMenuItems[0], // Dashboard
+        adminMenuItem,    // Users (Admin only)
+        ...baseMenuItems.slice(1), // Rest of items
+      ];
+    }
+    return baseMenuItems;
+  }, [isAdmin]);
 
   const getUserInitials = () => {
     if (!currentUser) return "??";
@@ -109,7 +134,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border p-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-3 w-full hover:bg-sidebar-accent rounded-xl p-2.5 transition-all hover:shadow-sm group">
+            <button className="flex items-center gap-3 w-full hover:bg-sidebar-accent rounded-xl p-2.5 transition-all hover:shadow-sm group focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
               <Avatar className="h-9 w-9 ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all">
                 <AvatarFallback className="bg-gradient-to-br from-primary to-primary-dark text-primary-foreground text-sm font-semibold">
                   {getUserInitials()}
@@ -139,17 +164,17 @@ export function AppSidebar() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => navigate("/settings")}
-              className="cursor-pointer gap-2 py-2"
+              className="cursor-pointer gap-2 py-2 hover:bg-primary/10 hover:text-primary hover:shadow-sm focus:bg-primary/10 focus:text-primary transition-all rounded-lg group"
             >
-              <User className="h-4 w-4" />
+              <User className="h-4 w-4 transition-transform group-hover:scale-110" />
               <span>Account Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={handleLogout}
-              className="text-destructive focus:text-destructive cursor-pointer gap-2 py-2 font-medium"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive hover:shadow-sm focus:bg-destructive/10 focus:text-destructive cursor-pointer gap-2 py-2 font-medium transition-all rounded-lg group"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-4 w-4 transition-transform group-hover:scale-110" />
               <span>Sign Out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>

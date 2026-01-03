@@ -1,34 +1,36 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useUserPlan } from '@/hooks/useUserProfile';
-import { useVideos } from '@/hooks/useVideos';
-import { useMemo } from 'react';
+import { useUserPlanRealtime } from '@/hooks/useUserProfile';
 import { useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
 
 export function UsageWarningBanner() {
   const navigate = useNavigate();
-  const { plan, totalCredits, creditsUsed } = useUserPlan();
-  const { data: videos = [] } = useVideos();
+  const { plan, totalCredits, creditsUsed = 0, creditsExpiryDate } = useUserPlanRealtime();
 
-  // Calculate used credits from videos if not available in profile
-  const calculatedCreditsUsed = useMemo(() => {
-    if (creditsUsed !== undefined && creditsUsed !== null) {
-      return creditsUsed;
+  // Check if subscription has expired
+  const creditsExpiry = useMemo(() => {
+    if (!creditsExpiryDate) return null;
+    if (creditsExpiryDate?.toDate) {
+      return creditsExpiryDate.toDate();
     }
+    if (typeof creditsExpiryDate === 'string') {
+      return new Date(creditsExpiryDate);
+    }
+    return null;
+  }, [creditsExpiryDate]);
 
-    // Fallback: calculate from videos
-    return videos.reduce((sum, video) => {
-      if (video.videoInfo?.duration) {
-        const durationInSeconds = video.videoInfo.duration;
-        const durationInMinutes = Math.ceil(durationInSeconds / 60);
-        return sum + durationInMinutes;
-      }
-      return sum;
-    }, 0);
-  }, [creditsUsed, videos]);
+  const isSubscriptionExpired = useMemo(() => {
+    if (!creditsExpiry || plan === 'Free') return false;
+    return creditsExpiry < new Date();
+  }, [creditsExpiry, plan]);
 
-  const usagePercentage = totalCredits > 0 ? (calculatedCreditsUsed / totalCredits) * 100 : 0;
+  // Display plan - show "Free" if subscription expired
+  const displayPlan = isSubscriptionExpired ? 'Free' : plan;
+
+  // Use backend creditsUsed value (tracked in Firestore)
+  const usagePercentage = totalCredits > 0 ? (creditsUsed / totalCredits) * 100 : 0;
 
   // Don't show banner if usage is below 75%
   if (usagePercentage < 75) return null;
@@ -50,9 +52,9 @@ export function UsageWarningBanner() {
       return `You've used all ${totalCredits} minutes. Upgrade to continue processing videos.`;
     }
     if (usagePercentage >= 90) {
-      return `You've used ${calculatedCreditsUsed} of ${totalCredits} minutes (${Math.round(usagePercentage)}%). Consider upgrading for more credits.`;
+      return `You've used ${creditsUsed} of ${totalCredits} minutes (${Math.round(usagePercentage)}%). Consider upgrading for more credits.`;
     }
-    return `You've used ${calculatedCreditsUsed} of ${totalCredits} minutes (${Math.round(usagePercentage)}%). You're approaching your limit.`;
+    return `You've used ${creditsUsed} of ${totalCredits} minutes (${Math.round(usagePercentage)}%). You're approaching your limit.`;
   };
 
   return (
@@ -65,7 +67,7 @@ export function UsageWarningBanner() {
       <AlertTitle>{getTitle()}</AlertTitle>
       <AlertDescription className="flex items-center justify-between">
         <span className="flex-1">{getMessage()}</span>
-        {plan === 'Free' && (
+        {displayPlan === 'Free' && (
           <Button
             variant={usagePercentage >= 90 ? 'default' : 'outline'}
             size="sm"

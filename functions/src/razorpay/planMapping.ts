@@ -1,6 +1,9 @@
 /**
  * Razorpay Plan Mapping Configuration
  * Maps frontend plan names to Razorpay plan IDs for different currencies
+ *
+ * NOTE: Currently only INR currency is supported in production.
+ * USD plans are kept for future expansion but not actively used.
  */
 
 export type PlanName = 'Free' | 'Starter' | 'Professional';
@@ -9,7 +12,11 @@ export type Currency = 'INR' | 'USD';
 
 /**
  * Maps plan names + billing period + currency to Razorpay plan IDs
- * IMPORTANT: Create these plans in Razorpay dashboard before using
+ * IMPORTANT: Replace placeholder IDs with actual Razorpay plan IDs from your dashboard
+ *
+ * Currently Active (INR only):
+ * - Starter Monthly INR: plan_RybpDLG1KKnDCb (✓ Active)
+ * - Others: Need to be replaced with actual Razorpay plan IDs
  */
 export const PLAN_MAPPING: Record<
   Exclude<PlanName, "Free">,
@@ -17,22 +24,22 @@ export const PLAN_MAPPING: Record<
 > = {
   Starter: {
     monthly: {
-      INR: "plan_RybpDLG1KKnDCb",
-      USD: "plan_starter_monthly_usd",
+      INR: "plan_RybpDLG1KKnDCb", // ✓ Replace with your Razorpay plan ID
+      USD: "plan_starter_monthly_usd", // Not used - INR only
     },
     yearly: {
-      INR: "plan_starter_yearly_inr",
-      USD: "plan_starter_yearly_usd",
+      INR: "plan_Ryyy1wcBFDFslo", // TODO: Replace with actual Razorpay plan ID
+      USD: "plan_starter_yearly_usd", // Not used - INR only
     },
   },
   Professional: {
     monthly: {
-      INR: "plan_professional_monthly_inr",
-      USD: "plan_professional_monthly_usd",
+      INR: "plan_RyywJzNVLpu8Ya", // TODO: Replace with actual Razorpay plan ID
+      USD: "plan_professional_monthly_usd", // Not used - INR only
     },
     yearly: {
-      INR: "plan_professional_yearly_inr",
-      USD: "plan_professional_yearly_usd",
+      INR: "plan_Ryyv7DUZW9iMRx", // TODO: Replace with actual Razorpay plan ID
+      USD: "plan_professional_yearly_usd", // Not used - INR only
     },
   },
 };
@@ -41,9 +48,9 @@ export const PLAN_MAPPING: Record<
  * Credit allocations per plan (in minutes)
  */
 export const PLAN_CREDITS: Record<PlanName, number> = {
-  Free: 60,           // 60 minutes per month
-  Starter: 300,       // 300 minutes per month
-  Professional: 500,  // 500 minutes per month
+  Free: 30,           // 30 minutes per month
+  Starter: 150,       // 150 minutes per month
+  Professional: 350,  // 350 minutes per month
 };
 
 /**
@@ -96,17 +103,18 @@ export const PLAN_FEATURES: Record<PlanName, {
  */
 export const PLAN_PRICING = {
   Starter: {
-    monthly: { USD: 29, INR: 2400 },      // ~$29 USD = ₹2,400
-    yearly: { USD: 279, INR: 23200 },     // ~$279 USD = ₹23,200 (20% discount)
+    monthly: { USD: 29, INR: 149 },      // ~$29 USD = ₹2,400
+    yearly: { USD: 279, INR: 1430 },     // ~$279 USD = ₹23,200 (20% discount)
   },
   Professional: {
-    monthly: { USD: 79, INR: 6560 },      // ~$79 USD = ₹6,560
-    yearly: { USD: 758, INR: 63064 },     // ~$758 USD = ₹63,064 (20% discount)
+    monthly: { USD: 79, INR: 249 },      // ~$79 USD = ₹6,560
+    yearly: { USD: 758, INR: 2390 },     // ~$758 USD = ₹63,064 (20% discount)
   },
 };
 
 /**
  * Get plan ID from plan name, billing period, and currency
+ * Currently only INR currency is supported
  */
 export function getRazorpayPlanId(
   planName: PlanName,
@@ -117,10 +125,22 @@ export function getRazorpayPlanId(
     throw new Error('Free plan does not have a Razorpay plan ID');
   }
 
+  // Currently only INR is supported
+  if (currency !== 'INR') {
+    throw new Error(`Only INR currency is currently supported. Received: ${currency}`);
+  }
+
   const planId = PLAN_MAPPING[planName]?.[billingPeriod]?.[currency];
 
   if (!planId) {
     throw new Error(`Plan ID not found for ${planName} ${billingPeriod} ${currency}`);
+  }
+
+  // Validate that it's not a placeholder
+  if (planId.includes('_inr') || planId.includes('_usd')) {
+    throw new Error(
+      `Plan ID "${planId}" appears to be a placeholder. Please replace with actual Razorpay plan ID from dashboard.`
+    );
   }
 
   return planId;

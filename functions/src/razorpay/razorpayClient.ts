@@ -49,6 +49,7 @@ export class RazorpayClient {
 
   /**
    * Create subscription
+   * IMPORTANT: customer_id must be at root level, not in notes
    */
   async createSubscription(
     customerId: string,
@@ -61,12 +62,13 @@ export class RazorpayClient {
     try {
       return await this.razorpay.subscriptions.create({
         plan_id: planId,
+        customer_id: customerId, // CRITICAL: Link subscription to customer
         customer_notify: 1,
         total_count: 12, // For yearly plans - 12 months
         quantity: 1,
         addons: [],
         notes: {
-          customer_id: customerId,
+          // Additional metadata
         },
       } as any);
     } catch (error: any) {
@@ -133,6 +135,18 @@ export class RazorpayClient {
     } catch (error: any) {
       console.error('Fetch subscription payments error:', error);
       throw new Error(`Failed to fetch subscription payments: ${error.message}`);
+    }
+  }
+
+  /**
+   * Fetch payment details
+   */
+  async fetchPayment(paymentId: string) {
+    try {
+      return await this.razorpay.payments.fetch(paymentId);
+    } catch (error: any) {
+      console.error('Fetch payment error:', error);
+      throw new Error(`Failed to fetch payment: ${error.message}`);
     }
   }
 

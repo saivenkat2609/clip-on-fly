@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from 'react';
 
 export interface UserProfile {
   uid: string;
@@ -14,7 +15,7 @@ export interface UserProfile {
 
   // Plan & Subscription
   plan: 'Free' | 'Starter' | 'Professional';
-  subscriptionStatus?: 'none' | 'active' | 'cancelled' | 'expired' | 'paused' | 'halted';
+  subscriptionStatus?: 'none' | 'active' | 'authenticated' | 'cancelled' | 'expired' | 'paused' | 'halted';
   subscriptionId?: string;
   razorpayCustomerId?: string;
   preferredCurrency?: 'INR' | 'USD';
@@ -38,6 +39,9 @@ export interface UserProfile {
   theme: string;
   mode: string;
   company: string;
+
+  // Role
+  role?: 'user' | 'admin';
 
   // Statistics
   totalVideos: number;
@@ -80,16 +84,27 @@ export function useUserProfile() {
       if (!userId) return null;
 
       // Try sessionStorage first (instant, no API call)
-      try {
-        const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < SESSION_CACHE_TTL) {
-            return data as UserProfile;
+      // Skip cache if we just came from a payment (URL has payment success indicator)
+      const skipCache = window.location.search.includes('payment=success') ||
+                        sessionStorage.getItem('payment_just_completed') === 'true';
+
+      if (!skipCache) {
+        try {
+          const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
+          if (cached) {
+            const { data, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < SESSION_CACHE_TTL) {
+              return data as UserProfile;
+            }
           }
+        } catch (error) {
+          console.error('Failed to read cached profile:', error);
         }
-      } catch (error) {
-        console.error('Failed to read cached profile:', error);
+      }
+
+      // Clear payment flag after using it
+      if (skipCache) {
+        sessionStorage.removeItem('payment_just_completed');
       }
 
       // Only fetch from Firestore if cache miss
@@ -146,6 +161,56 @@ export function useUserProfile() {
 }
 
 /**
+ * Real-time listener for user profile - USE THIS FOR CREDITS
+ * Updates immediately when credits change in Firestore
+ */
+export function useUserProfileRealtime() {
+  const { currentUser } = useAuth();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setProfile(null);
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[useUserProfileRealtime] Setting up real-time listener for user:', currentUser.uid);
+
+    const userDocRef = doc(db, 'users', currentUser.uid);
+
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as UserProfile;
+          console.log('[useUserProfileRealtime] Profile updated:', {
+            creditsUsed: data.creditsUsed,
+            totalCredits: data.totalCredits,
+          });
+          setProfile(data);
+        } else {
+          setProfile(null);
+        }
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('[useUserProfileRealtime] Listener error:', error);
+        setIsLoading(false);
+      }
+    );
+
+    return () => {
+      console.log('[useUserProfileRealtime] Cleaning up listener');
+      unsubscribe();
+    };
+  }, [currentUser?.uid]);
+
+  return { data: profile, isLoading };
+}
+
+/**
  * Hook to get specific user plan data
  */
 export function useUserPlan() {
@@ -154,8 +219,26 @@ export function useUserPlan() {
   return {
     ...rest,
     plan: profile?.plan || 'Free',
-    totalCredits: profile?.totalCredits || 60,
+    totalCredits: profile?.totalCredits || 30,
+    creditsUsed: profile?.creditsUsed || 0,
     creditsExpiryDate: profile?.creditsExpiryDate,
+    subscriptionStatus: profile?.subscriptionStatus,
+  };
+}
+
+/**
+ * Real-time hook for user plan data - UPDATES IMMEDIATELY
+ */
+export function useUserPlanRealtime() {
+  const { data: profile, isLoading } = useUserProfileRealtime();
+
+  return {
+    isLoading,
+    plan: profile?.plan || 'Free',
+    totalCredits: profile?.totalCredits || 30,
+    creditsUsed: profile?.creditsUsed || 0,
+    creditsExpiryDate: profile?.creditsExpiryDate,
+    subscriptionStatus: profile?.subscriptionStatus,
   };
 }
 

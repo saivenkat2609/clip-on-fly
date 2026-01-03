@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useVideos } from "@/hooks/useVideos";
-import { useUserPlan } from "@/hooks/useUserProfile";
+import { useUserPlanRealtime, useUserProfileRealtime } from "@/hooks/useUserProfile";
 import { useVideoStatus } from "@/hooks/useWebSocket";
 import { useRemainingCredits } from "@/hooks/useRemainingCredits";
 import {
@@ -145,7 +145,11 @@ export default function Dashboard() {
 
   // Use cached hooks - ONLY Dashboard gets real-time updates for video processing status
   const { data: videos = [], isLoading: loading, error: queryError } = useVideos({ realTime: true });
-  const { plan: userPlan = "Free", totalCredits = 60, creditsExpiryDate, isLoading: loadingCredits } = useUserPlan();
+  const { data: userProfile } = useUserProfileRealtime();
+  const { plan: userPlan = "Free", totalCredits = 30, creditsExpiryDate, isLoading: loadingCredits } = useUserPlanRealtime();
+
+  // Check if user is admin
+  const isAdmin = userProfile?.role === 'admin';
 
   // Get processing videos for WebSocket connection
   const processingVideos = useMemo(
@@ -187,14 +191,23 @@ export default function Dashboard() {
     return null;
   }, [creditsExpiryDate]);
 
+  // Check if subscription has expired
+  const isSubscriptionExpired = useMemo(() => {
+    if (!creditsExpiry || userPlan === 'Free') return false;
+    return creditsExpiry < new Date();
+  }, [creditsExpiry, userPlan]);
+
+  // Display plan - show "Free" if subscription expired
+  const displayPlan = isSubscriptionExpired ? 'Free' : userPlan;
+
   // Set error from query if any
   if (queryError && !error) {
     setError("Failed to load videos. Please try again.");
   }
 
-  // Notifications listener (keep this as it's separate from caching hooks)
+  // Notifications listener - ONLY for admin users
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !isAdmin) return;
 
     const notificationsRef = collection(db, `users/${currentUser.uid}/notifications`);
     const notifQuery = query(notificationsRef, orderBy('createdAt', 'desc'));
@@ -215,7 +228,7 @@ export default function Dashboard() {
     );
 
     return () => unsubscribeNotifications();
-  }, [currentUser]);
+  }, [currentUser, isAdmin]);
 
   // Use shared hook for credits calculation
   const remainingCredits = useRemainingCredits();
@@ -279,69 +292,71 @@ export default function Dashboard() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {/* Notifications */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="relative">
-                  <Bell className="h-5 w-5" />
-                  {unreadNotifications > 0 && (
-                    <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs">
-                      {unreadNotifications}
-                    </Badge>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  <span>Notifications</span>
-                  {unreadNotifications > 0 && (
-                    <Badge variant="secondary">{unreadNotifications} new</Badge>
-                  )}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <ScrollArea className="h-[300px]">
-                  {notifications.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-muted-foreground">
-                      No notifications yet
-                    </div>
-                  ) : (
-                    notifications.slice(0, 10).map((notif) => (
-                      <DropdownMenuItem
-                        key={notif.id}
-                        className={`flex flex-col items-start p-3 cursor-pointer ${
-                          !notif.read ? 'bg-primary/5' : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-2 w-full">
-                          <div
-                            className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${
-                              notif.type === 'success'
-                                ? 'bg-green-500'
-                                : notif.type === 'error'
-                                ? 'bg-red-500'
-                                : notif.type === 'warning'
-                                ? 'bg-yellow-500'
-                                : 'bg-blue-500'
-                            }`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm">{notif.title}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {notif.message}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {notif.createdAt?.toDate
-                                ? notif.createdAt.toDate().toLocaleString()
-                                : new Date(notif.createdAt).toLocaleString()}
-                            </p>
+            {/* Notifications - ONLY visible for admin users */}
+            {isAdmin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="relative">
+                    <Bell className="h-5 w-5" />
+                    {unreadNotifications > 0 && (
+                      <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs">
+                        {unreadNotifications}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    <span>Notifications</span>
+                    {unreadNotifications > 0 && (
+                      <Badge variant="secondary">{unreadNotifications} new</Badge>
+                    )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <ScrollArea className="h-[300px]">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        No notifications yet
+                      </div>
+                    ) : (
+                      notifications.slice(0, 10).map((notif) => (
+                        <DropdownMenuItem
+                          key={notif.id}
+                          className={`flex flex-col items-start p-3 cursor-pointer ${
+                            !notif.read ? 'bg-primary/5' : ''
+                          }`}
+                        >
+                          <div className="flex items-start gap-2 w-full">
+                            <div
+                              className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                notif.type === 'success'
+                                  ? 'bg-green-500'
+                                  : notif.type === 'error'
+                                  ? 'bg-red-500'
+                                  : notif.type === 'warning'
+                                  ? 'bg-yellow-500'
+                                  : 'bg-blue-500'
+                              }`}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm">{notif.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {notif.message}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {notif.createdAt?.toDate
+                                  ? notif.createdAt.toDate().toLocaleString()
+                                  : new Date(notif.createdAt).toLocaleString()}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </DropdownMenuItem>
-                    ))
-                  )}
-                </ScrollArea>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </ScrollArea>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {/* Credits Display with Hover Popover */}
             <Popover>
@@ -360,9 +375,9 @@ export default function Dashboard() {
                 <div className="p-4 space-y-4">
                   {/* Plan Info */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{userPlan} Plan</span>
-                    <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/20">
-                      Active
+                    <span className="text-sm font-semibold">{displayPlan} Plan</span>
+                    <Badge variant="secondary" className={isSubscriptionExpired ? "bg-gray-500/10 text-gray-600 border-gray-500/20" : "bg-green-500/10 text-green-600 border-green-500/20"}>
+                      {isSubscriptionExpired ? "Expired" : "Active"}
                     </Badge>
                   </div>
 

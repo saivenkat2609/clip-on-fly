@@ -488,6 +488,53 @@ export const createRazorpaySubscription = functions
       throw new functions.https.HttpsError('not-found', 'User not found');
     }
 
+    // 3.5 Check if user already has an active subscription for this plan
+    const existingSubscriptions = await db
+      .collection('users')
+      .doc(userId)
+      .collection('subscriptions')
+      .where('planName', '==', planName)
+      .where('status', 'in', ['active', 'authenticated', 'created'])
+      .get();
+
+    if (!existingSubscriptions.empty) {
+      // Verify actual status from Razorpay (user may have cancelled in dashboard)
+      const existingSubDoc = existingSubscriptions.docs[0];
+      const existingSubData = existingSubDoc.data();
+
+      try {
+        const razorpayClient = new RazorpayClient(
+          razorpayKeyId.value(),
+          razorpayKeySecret.value(),
+          razorpayWebhookSecret.value()
+        );
+        const razorpaySub = await razorpayClient.fetchSubscription(existingSubData.razorpaySubscriptionId);
+
+        // Update Firestore with actual Razorpay status
+        if (razorpaySub.status === 'cancelled' || razorpaySub.status === 'completed' || razorpaySub.status === 'expired') {
+          await existingSubDoc.ref.update({
+            status: razorpaySub.status,
+            cancelledAt: razorpaySub.ended_at ? admin.firestore.Timestamp.fromMillis(razorpaySub.ended_at * 1000) : admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`Updated subscription ${existingSubData.razorpaySubscriptionId} status to ${razorpaySub.status}`);
+        } else {
+          // Still active in Razorpay, block duplicate
+          throw new functions.https.HttpsError(
+            'already-exists',
+            `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
+          );
+        }
+      } catch (error: any) {
+        // If Razorpay fetch fails, assume subscription is still active and block
+        console.error('Failed to verify subscription status from Razorpay:', error);
+        throw new functions.https.HttpsError(
+          'already-exists',
+          `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
+        );
+      }
+    }
+
     // 4. Initialize Razorpay client
     const razorpayClient = new RazorpayClient(
       razorpayKeyId.value(),
@@ -588,10 +635,15 @@ export const verifyRazorpayPayment = functions
     );
 
     try {
-      // Fetch subscription from Razorpay
+      // Fetch subscription and payment from Razorpay
       const subscription = await razorpayClient.fetchSubscription(razorpaySubscriptionId);
+      const payment = await razorpayClient.fetchPayment(razorpayPaymentId);
 
-      if (subscription.status === 'active') {
+      console.log('Subscription status:', subscription.status);
+      console.log('Payment status:', payment.status);
+
+      // Accept 'active' or 'authenticated' status (authenticated means first payment done, waiting for activation)
+      if (subscription.status === 'active' || subscription.status === 'authenticated') {
         // Update Firestore subscription
         const subscriptionRef = db
           .collection('users')
@@ -620,7 +672,7 @@ export const verifyRazorpayPayment = functions
         const planFeatures = getPlanFeatures(subscriptionData.planName);
         await db.collection('users').doc(userId).update({
           plan: subscriptionData.planName,
-          subscriptionStatus: 'active',
+          subscriptionStatus: subscription.status === 'active' ? 'active' : 'authenticated',
           subscriptionId: razorpaySubscriptionId,
           totalCredits: subscriptionData.totalCredits,
           creditsUsed: 0,
@@ -628,7 +680,7 @@ export const verifyRazorpayPayment = functions
           ...planFeatures,
         });
 
-        // Create transaction record
+        // Create transaction record with actual payment amount
         await db
           .collection('users')
           .doc(userId)
@@ -636,31 +688,49 @@ export const verifyRazorpayPayment = functions
           .add({
             razorpayPaymentId,
             razorpaySubscriptionId,
+            razorpayCustomerId: subscriptionData.razorpayCustomerId,
+            razorpayInvoiceId: payment.invoice_id || null,
             userId,
             planName: subscriptionData.planName,
             billingPeriod: subscriptionData.billingPeriod,
-            amount: subscriptionData.amount,
-            currency: subscriptionData.currency,
-            status: 'captured',
-            method: 'card',
+            amount: payment.amount, // Actual payment amount from Razorpay
+            currency: payment.currency,
+            status: payment.status,
+            method: payment.method || 'card',
+            cardLast4: payment.card?.last4 || null,
+            cardNetwork: payment.card?.network || null,
+            paidAt: admin.firestore.FieldValue.serverTimestamp(),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             description: `${subscriptionData.planName} Plan - ${subscriptionData.billingPeriod}`,
           });
 
         return {
           success: true,
-          status: 'active',
+          status: subscription.status,
           message: 'Subscription activated successfully',
         };
       }
 
+      // If subscription is in other status, log details
+      console.error('Subscription not active:', {
+        status: subscription.status,
+        subscriptionId: razorpaySubscriptionId,
+        paymentId: razorpayPaymentId,
+      });
+
       return {
         success: false,
         status: subscription.status,
-        message: 'Payment verification pending',
+        message: `Subscription status is ${subscription.status}. Expected 'active' or 'authenticated'.`,
       };
     } catch (error: any) {
       console.error('Verify payment error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        razorpaySubscriptionId,
+        razorpayPaymentId,
+      });
       throw new functions.https.HttpsError('internal', error.message);
     }
   });
@@ -751,6 +821,35 @@ export const trackVideoUsage = functions
     const durationMinutes = Math.ceil(durationSeconds / 60);
 
     try {
+      // CRITICAL FIX: Check if this video was already tracked to prevent double-charging
+      const videoRef = db.collection('users').doc(userId).collection('videos').doc(sessionId);
+      const videoDoc = await videoRef.get();
+
+      if (!videoDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Video not found');
+      }
+
+      const videoData = videoDoc.data();
+
+      // If already tracked, return early without charging again
+      if (videoData?.usageTracked === true) {
+        console.log(`[trackVideoUsage] Video ${sessionId} already tracked, skipping`);
+        const userDoc = await db.collection('users').doc(userId).get();
+        const userData = userDoc.data();
+        return {
+          success: true,
+          alreadyTracked: true,
+          creditsUsed: userData?.creditsUsed || 0,
+          creditsRemaining: (userData?.totalCredits || 0) - (userData?.creditsUsed || 0),
+        };
+      }
+
+      // Mark video as tracked IMMEDIATELY to prevent race conditions
+      await videoRef.update({
+        usageTracked: true,
+        usageTrackedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
       // Get user's current subscription
       const userDoc = await db.collection('users').doc(userId).get();
       const userData = userDoc.data();
@@ -774,6 +873,8 @@ export const trackVideoUsage = functions
       await db.collection('users').doc(userId).update({
         creditsUsed: admin.firestore.FieldValue.increment(durationMinutes),
       });
+
+      console.log(`[trackVideoUsage] ✓ Tracked ${durationMinutes} credits for video ${sessionId}`);
 
       // Update usage tracking
       const monthYear = new Date().toISOString().slice(0, 7);
@@ -853,12 +954,105 @@ export const trackVideoUsage = functions
 
       return {
         success: true,
+        alreadyTracked: false,
         creditsUsed: creditsUsed + durationMinutes,
         creditsRemaining: totalCredits - (creditsUsed + durationMinutes),
       };
     } catch (error: any) {
       console.error('Track usage error:', error);
       throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
+
+/**
+ * UTILITY: Mark all existing videos as tracked (one-time migration)
+ * Call this once to prevent old videos from being re-tracked
+ */
+export const markAllVideosAsTracked = functions
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+
+    try {
+      console.log(`[markAllVideosAsTracked] Starting for user ${userId}`);
+
+      const videosSnapshot = await db
+        .collection('users')
+        .doc(userId)
+        .collection('videos')
+        .get();
+
+      let markedCount = 0;
+      let alreadyMarkedCount = 0;
+
+      const batch = db.batch();
+
+      videosSnapshot.docs.forEach((videoDoc) => {
+        const videoData = videoDoc.data();
+
+        if (!videoData.usageTracked) {
+          batch.update(videoDoc.ref, {
+            usageTracked: true,
+            usageTrackedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          markedCount++;
+        } else {
+          alreadyMarkedCount++;
+        }
+      });
+
+      await batch.commit();
+
+      console.log(`[markAllVideosAsTracked] ✓ Marked ${markedCount} videos, ${alreadyMarkedCount} already marked`);
+
+      return {
+        success: true,
+        markedCount,
+        alreadyMarkedCount,
+        totalVideos: videosSnapshot.size,
+      };
+    } catch (error: any) {
+      console.error('[markAllVideosAsTracked] Error:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        error?.message || 'Failed to mark videos as tracked'
+      );
+    }
+  });
+
+/**
+ * UTILITY: Reset credits to zero (for testing)
+ */
+export const resetCreditsForTesting = functions
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+
+    try {
+      console.log(`[resetCreditsForTesting] Resetting credits for user ${userId}`);
+
+      await db.collection('users').doc(userId).update({
+        creditsUsed: 0,
+      });
+
+      console.log(`[resetCreditsForTesting] ✓ Credits reset to 0`);
+
+      return {
+        success: true,
+        message: 'Credits reset to 0',
+      };
+    } catch (error: any) {
+      console.error('[resetCreditsForTesting] Error:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        error?.message || 'Failed to reset credits'
+      );
     }
   });
 
@@ -1030,6 +1224,7 @@ async function handleSubscriptionCharged(payment: any, subscription: any) {
     .add({
       razorpayPaymentId: payment.id,
       razorpaySubscriptionId: subscription.id,
+      razorpayCustomerId: subscriptionData.razorpayCustomerId,
       razorpayInvoiceId: payment.invoice_id,
       userId,
       planName: subscriptionData.planName,
@@ -1173,3 +1368,62 @@ async function handlePaymentFailed(payment: any) {
   console.error('Payment failed:', payment.id, payment.error_description);
   // TODO: Send notification to user about failed payment
 }
+
+/**
+ * Admin Function: Get All Users
+ * Fetches all users for admin dashboard
+ * Only accessible by users with role='admin'
+ */
+export const getAllUsers = functions
+  .https.onCall(async (data, context) => {
+    // Check authentication
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+
+    const userId = context.auth.uid;
+
+    try {
+      // Check if user is admin
+      const userDoc = await db.collection('users').doc(userId).get();
+      const userData = userDoc.data();
+
+      if (!userData || userData.role !== 'admin') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Only admin users can access this function'
+        );
+      }
+
+      console.log(`[getAllUsers] Admin ${userId} requesting all users`);
+
+      // Fetch all users (Admin SDK bypasses security rules)
+      const usersSnapshot = await db.collection('users')
+        .orderBy('createdAt', 'desc')
+        .get();
+
+      const users = usersSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          uid: doc.id,
+          email: data.email || '',
+          displayName: data.displayName || 'Unknown User',
+          plan: data.plan || 'Free',
+          totalCredits: data.totalCredits || 0,
+          creditsUsed: data.creditsUsed || 0,
+          subscriptionStatus: data.subscriptionStatus || 'none',
+          createdAt: data.createdAt || null,
+        };
+      });
+
+      console.log(`[getAllUsers] Successfully fetched ${users.length} users`);
+
+      return {
+        success: true,
+        users: users,
+      };
+    } catch (error: any) {
+      console.error('[getAllUsers] Error:', error);
+      throw new functions.https.HttpsError('internal', error.message);
+    }
+  });
