@@ -99,11 +99,19 @@ export default function RefundPolicy() {
                 To request a refund:
               </p>
               <ol className="list-decimal list-inside space-y-2 text-muted-foreground ml-4">
-                <li>Contact our support team at billing@nebulaai.com</li>
+                <li>Contact our support team at nebulaai.help@gmail.com</li>
                 <li>Include your account email and transaction ID</li>
                 <li>Provide a brief explanation of your refund request</li>
                 <li>Allow 3-5 business days for review</li>
               </ol>
+              <div className="mt-4 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                <p className="text-sm font-semibold text-primary mb-1">
+                  Support via email only
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  We provide support exclusively via email with responses within 24–48 hours. For refund requests, please allow an additional 3-5 business days for review.
+                </p>
+              </div>
               <p className="text-muted-foreground leading-relaxed mt-3">
                 Approved refunds will be processed within 7-10 business days to your original payment method.
               </p>
@@ -182,13 +190,15 @@ export default function RefundPolicy() {
 
             <section>
               <h2 className="text-xl font-semibold mb-3">11. Contact Us</h2>
-              <p className="text-muted-foreground leading-relaxed">
+              <p className="text-muted-foreground leading-relaxed mb-3">
                 For questions about refunds or cancellations, please contact us at:
               </p>
-              <p className="text-muted-foreground mt-2">
-                Email: billing@nebulaai.com<br />
-                Support: support@nebulaai.com<br />
+              <p className="text-muted-foreground">
+                Email: nebulaai.help@gmail.com<br />
                 Address: NebulaAI Billing Department
+              </p>
+              <p className="text-sm text-muted-foreground mt-3 italic">
+                Support via email only (responses within 24–48 hours)
               </p>
             </section>
           </CardContent>

@@ -136,7 +136,7 @@ export default function TermsOfService() {
                 For questions about these Terms, please contact us at:
               </p>
               <p className="text-muted-foreground mt-2">
-                Email: legal@nebulaai.com<br />
+                Email: nebulaai.help@gmail.com<br />
                 Address: NebulaAI Legal Department
               </p>
             </section>

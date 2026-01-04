@@ -131,7 +131,7 @@ function TermsOfServiceContent() {
       <section>
         <h3 className="font-semibold text-base mb-2">11. Contact Us</h3>
         <p className="text-muted-foreground">
-          If you have any questions about these Terms, please contact us at support@nebulaai.com
+          If you have any questions about these Terms, please contact us at nebulaai.help@gmail.com
         </p>
       </section>
 
@@ -256,7 +256,7 @@ function PrivacyPolicyContent() {
       <section>
         <h3 className="font-semibold text-base mb-2">12. Contact Us</h3>
         <p className="text-muted-foreground">
-          If you have any questions about this Privacy Policy, please contact us at privacy@nebulaai.com
+          If you have any questions about this Privacy Policy, please contact us at nebulaai.help@gmail.com
         </p>
       </section>
 

@@ -171,7 +171,7 @@ export default function CookiePolicy() {
                 If you have questions about our use of cookies, please contact us at:
               </p>
               <p className="text-muted-foreground mt-2">
-                Email: privacy@nebulaai.com<br />
+                Email: nebulaai.help@gmail.com<br />
                 Address: NebulaAI Privacy Team
               </p>
             </section>

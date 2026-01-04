@@ -156,20 +156,20 @@ export default function Contact() {
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-sm font-semibold mb-1">General Inquiries</p>
-                  <a href="mailto:support@nebulaai.com" className="text-primary hover:underline">
-                    support@nebulaai.com
+                  <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">
+                    nebulaai.help@gmail.com
                   </a>
                 </div>
                 <div>
                   <p className="text-sm font-semibold mb-1">Billing & Payments</p>
-                  <a href="mailto:billing@nebulaai.com" className="text-primary hover:underline">
-                    billing@nebulaai.com
+                  <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">
+                    nebulaai.help@gmail.com
                   </a>
                 </div>
                 <div>
                   <p className="text-sm font-semibold mb-1">Privacy & Legal</p>
-                  <a href="mailto:legal@nebulaai.com" className="text-primary hover:underline">
-                    legal@nebulaai.com
+                  <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">
+                    nebulaai.help@gmail.com
                   </a>
                 </div>
               </CardContent>
@@ -179,24 +179,32 @@ export default function Contact() {
               <CardHeader>
                 <CardTitle className="text-xl font-bold flex items-center gap-2">
                   <MessageSquare className="h-5 w-5 text-primary" />
-                  Support Hours
+                  Support Information
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Monday - Friday</span>
-                  <span className="font-semibold">9:00 AM - 6:00 PM EST</span>
+              <CardContent className="space-y-3">
+                <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
+                  <p className="text-sm font-semibold text-primary mb-1">
+                    Email Support Only
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    We currently provide support exclusively via email to ensure detailed and documented responses.
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Saturday</span>
-                  <span className="font-semibold">10:00 AM - 4:00 PM EST</span>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Response Time:</span>
+                    <span className="text-sm font-semibold">24–48 hours</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Support Email:</span>
+                    <a href="mailto:nebulaai.help@gmail.com" className="text-sm font-semibold text-primary hover:underline">
+                      nebulaai.help@gmail.com
+                    </a>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sunday</span>
-                  <span className="font-semibold">Closed</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-4">
-                  We typically respond within 24 hours during business days.
+                <p className="text-xs text-muted-foreground pt-2 border-t">
+                  For faster resolution, please include your account email and detailed description of your issue.
                 </p>
               </CardContent>
             </Card>

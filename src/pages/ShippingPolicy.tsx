@@ -155,7 +155,7 @@ export default function ShippingPolicy() {
               <h2 className="text-xl font-semibold mb-3">11. Contact Support</h2>
               <p className="text-muted-foreground leading-relaxed">
                 If you experience any issues with service delivery, access, or downloads, please contact our support
-                team at <a href="mailto:support@nebulaai.com" className="text-primary hover:underline">support@nebulaai.com</a>.
+                team at <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">nebulaai.help@gmail.com</a>.
                 We typically respond within 24 hours during business days and provide 24/7 emergency support for critical issues.
               </p>
             </section>
