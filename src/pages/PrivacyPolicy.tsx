@@ -152,7 +152,7 @@ export default function PrivacyPolicy() {
                 If you have questions about this Privacy Policy or our data practices, please contact us at:
               </p>
               <p className="text-muted-foreground mt-2">
-                Email: privacy@nebulaai.com<br />
+                Email: nebulaai.help@gmail.com<br />
                 Address: NebulaAI Privacy Team
               </p>
             </section>
