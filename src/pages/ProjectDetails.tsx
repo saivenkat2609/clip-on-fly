@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { VideoPreviewModal } from "@/components/VideoPreviewModal";
 import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { YouTubePostModal } from "@/components/YouTubePostModal";
 import { TemplateSelectionModal } from "@/components/TemplateSelectionModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTrackVideoUsage } from "@/hooks/useSubscription";
-import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette, RefreshCw, CheckCircle2, Circle, ArrowDownToLine, MessageSquare, Sparkles, Video, Edit3 } from "lucide-react";
+import { useUserProfileRealtime } from "@/hooks/useUserProfile";
+import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette, RefreshCw, CheckCircle2, Circle, ArrowDownToLine, MessageSquare, Sparkles, Video, Edit3, Check, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -59,6 +61,8 @@ interface VideoClip {
   templateId?: string;
   template_id?: string;  // Also support snake_case from backend
   template_name?: string;  // NEW: Template name from backend
+  cachedThumbnail?: string;  // Cached thumbnail data URL
+  thumbnailTimestamp?: number;  // Timestamp used for thumbnail extraction
 }
 
 interface Video {
@@ -79,7 +83,7 @@ interface Video {
   usageTracked?: boolean; // Flag to prevent double-charging credits
 }
 
-type FilterType = "all" | "liked" | "disliked" | "edited" | "short";
+type FilterType = "all" | "liked" | "disliked" | "edited";
 type SortType = "virality" | "chronological";
 
 export default function ProjectDetails() {
@@ -90,6 +94,14 @@ export default function ProjectDetails() {
   const [video, setVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Get user profile for admin check
+  const { data: userProfile } = useUserProfileRealtime();
+  const isAdmin = userProfile?.role === 'admin';
+
+  // Editable title state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
 
   // UI/UX FIX #96: Validate route parameter
   if (!sessionId || sessionId.trim() === '') {
@@ -345,6 +357,61 @@ export default function ProjectDetails() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // Handle title editing
+  const handleTitleEdit = () => {
+    if (!video) return;
+    const currentTitle = video.videoInfo?.title || video.projectName || "Untitled Video";
+    setEditedTitle(currentTitle);
+    setIsEditingTitle(true);
+  };
+
+  const handleTitleSave = async () => {
+    if (!currentUser || !sessionId || !video || !editedTitle.trim()) return;
+
+    try {
+      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
+      await updateDoc(videoRef, {
+        'videoInfo.title': editedTitle.trim()
+      });
+      toast.success("Title updated successfully");
+      setIsEditingTitle(false);
+    } catch (err) {
+      console.error("Error updating title:", err);
+      toast.error("Failed to update title");
+    }
+  };
+
+  const handleTitleCancel = () => {
+    setIsEditingTitle(false);
+    setEditedTitle("");
+  };
+
+  // Handle thumbnail caching
+  const handleThumbnailGenerated = async (clipIndex: number, thumbnailDataUrl: string, timestamp: number) => {
+    if (!currentUser || !sessionId || !video) return;
+
+    console.log(`[ProjectDetails] Saving thumbnail for clip ${clipIndex} at ${timestamp}s`);
+
+    const updatedClips = video.clips?.map((clip) => {
+      if (clip.clipIndex === clipIndex) {
+        return {
+          ...clip,
+          cachedThumbnail: thumbnailDataUrl,
+          thumbnailTimestamp: timestamp,
+        };
+      }
+      return clip;
+    });
+
+    try {
+      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
+      await updateDoc(videoRef, { clips: updatedClips });
+      console.log(`[ProjectDetails] Thumbnail saved successfully for clip ${clipIndex}`);
+    } catch (err) {
+      console.error("Error saving thumbnail:", err);
+    }
+  };
+
   // Handle like/dislike
   const handleLike = async (clipIndex: number) => {
     if (!currentUser || !sessionId || !video) return;
@@ -464,37 +531,33 @@ export default function ProjectDetails() {
     setTemplateModalOpen(true);
   };
 
-  // Filter clips
-  const filterClips = (clips: VideoClip[]) => {
-    if (activeFilters.includes("all")) return clips;
+  // Apply filters and sorting with memoization
+  const filteredClips = useMemo(() => {
+    if (!video?.clips) return [];
 
-    return clips.filter((clip) => {
-      if (activeFilters.includes("liked") && clip.liked) return true;
-      if (activeFilters.includes("disliked") && clip.disliked) return true;
-      if (activeFilters.includes("edited") && clip.edited) return true;
-      if (activeFilters.includes("short") && clip.duration && clip.duration < 180) return true;
-      return false;
-    });
-  };
+    // Filter first
+    let result = video.clips;
+    if (!activeFilters.includes("all")) {
+      result = video.clips.filter((clip) => {
+        if (activeFilters.includes("liked") && clip.liked) return true;
+        if (activeFilters.includes("disliked") && clip.disliked) return true;
+        if (activeFilters.includes("edited") && clip.edited) return true;
+        return false;
+      });
+    }
 
-  // Sort clips
-  const sortClips = (clips: VideoClip[]) => {
-    const sorted = [...clips];
+    // Then sort
+    const sorted = [...result];
     if (sortBy === "virality") {
       return sorted.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
     }
-    // chronological (by clipIndex)
-    return sorted.sort((a, b) => a.clipIndex - b.clipIndex);
-  };
-
-  // Apply filters and sorting
-  const getFilteredAndSortedClips = () => {
-    if (!video?.clips) return [];
-    const filtered = filterClips(video.clips);
-    return sortClips(filtered);
-  };
-
-  const filteredClips = getFilteredAndSortedClips();
+    // chronological (by clip title ascending alphabetically)
+    return sorted.sort((a, b) => {
+      const titleA = a.title || `Clip ${a.clipIndex + 1}`;
+      const titleB = b.title || `Clip ${b.clipIndex + 1}`;
+      return titleA.localeCompare(titleB);
+    });
+  }, [video?.clips, activeFilters, sortBy]);
 
   // Handle filter toggle
   const toggleFilter = (filter: FilterType) => {
@@ -600,10 +663,25 @@ export default function ProjectDetails() {
       <div className="p-6 md:p-8 space-y-8">
         {/* Header - Always visible */}
         <div>
-          <Button variant="ghost" onClick={() => navigate("/dashboard")} className="mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Button>
+          <div className="flex items-center justify-between mb-4">
+            <Button variant="ghost" onClick={() => navigate("/dashboard")}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Dashboard
+            </Button>
+            {/* Live Connection Indicator - ONLY visible for admin users when video is processing */}
+            {isAdmin && import.meta.env.VITE_ENABLE_WEBSOCKET === 'true' && video?.status === 'processing' && (
+              <Badge
+                variant={isConnected ? "default" : "secondary"}
+                className={`${
+                  isConnected
+                    ? 'bg-green-500/10 text-green-600 border-green-500/30'
+                    : 'bg-gray-500/10 text-gray-600 border-gray-500/30'
+                }`}
+              >
+                {isConnected ? '🟢 Live' : '🔴 Offline'}
+              </Badge>
+            )}
+          </div>
 
           {loading ? (
             /* Show minimal loading state with title and processing stages if from navigation */
@@ -748,16 +826,18 @@ export default function ProjectDetails() {
 
                     {/* Footer - Clean */}
                     <div className="bg-slate-50 dark:bg-slate-900/30 px-6 py-3 border-t border-border/40">
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                           <span className="text-slate-600 dark:text-slate-400">
                             {isConnected ? 'Connected' : 'Connecting...'}
                           </span>
                         </div>
-                        <span className="text-slate-500 dark:text-slate-500 text-xs">
-                          Clips will appear as they're ready
-                        </span>
+                        {isAdmin && (
+                          <span className="text-slate-500 dark:text-slate-500 text-xs">
+                            Clips will appear as they're ready
+                          </span>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -781,7 +861,43 @@ export default function ProjectDetails() {
             /* Show full video details */
             <div className="flex flex-col gap-4">
               <div>
-                <h1 className="text-3xl font-bold mb-2">{videoTitle}</h1>
+                {isEditingTitle ? (
+                  <div className="flex items-center gap-3 mb-2">
+                    <Input
+                      value={editedTitle}
+                      onChange={(e) => setEditedTitle(e.target.value)}
+                      className="text-3xl font-bold h-auto py-2 px-3 border-2 border-border focus-visible:ring-1 focus-visible:ring-border"
+                      style={{ fontSize: '1.875rem', lineHeight: '2.25rem' }}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleTitleSave();
+                        if (e.key === 'Escape') handleTitleCancel();
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleTitleSave}
+                      className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleTitleCancel}
+                      className="h-9 w-9 p-0 bg-slate-600 hover:bg-slate-700 text-white"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <h1
+                    className="text-3xl font-bold mb-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -ml-2 transition-colors inline-block"
+                    onClick={handleTitleEdit}
+                    title="Click to edit title"
+                  >
+                    {videoTitle}
+                  </h1>
+                )}
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Calendar className="h-4 w-4" />
@@ -952,16 +1068,18 @@ export default function ProjectDetails() {
 
                     {/* Footer - Clean */}
                     <div className="bg-slate-50 dark:bg-slate-900/30 px-6 py-3 border-t border-border/40">
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                           <span className="text-slate-600 dark:text-slate-400">
                             {isConnected ? 'Connected' : 'Connecting...'}
                           </span>
                         </div>
-                        <span className="text-slate-500 dark:text-slate-500 text-xs">
-                          Clips will appear as they're ready
-                        </span>
+                        {isAdmin && (
+                          <span className="text-slate-500 dark:text-slate-500 text-xs">
+                            Clips will appear as they're ready
+                          </span>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -1021,12 +1139,6 @@ export default function ProjectDetails() {
                     >
                       Edited
                     </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem
-                      checked={activeFilters.includes("short")}
-                      onCheckedChange={() => toggleFilter("short")}
-                    >
-                      Short (&lt;3min)
-                    </DropdownMenuCheckboxItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -1073,26 +1185,37 @@ export default function ProjectDetails() {
                   <Card
                     className="group overflow-hidden shadow-medium hover:shadow-large transition-shadow h-full"
                   >
-                  <div className="relative aspect-video overflow-hidden bg-muted">
-                    <VideoThumbnail
-                      key={`${clip.clipIndex}-${clip.reprocessedAt || clip.lastUpdated || clip.downloadUrl}`}
-                      videoUrl={clip.downloadUrl}
-                      alt={clip.title || `${videoTitle} - Clip ${clip.clipIndex + 1}`}
-                      onClick={() => {
-                        setPreviewVideo({
-                          url: clip.downloadUrl,
-                          title: clip.title || `${videoTitle} - Clip ${clip.clipIndex + 1}`,
-                          index: clip.clipIndex
-                        });
-                      }}
-                      showPlayButton={true}
-                    />
-                    <Badge className="absolute top-2 right-2 z-10 bg-black/70 text-white">
-                      Clip {clip.clipIndex + 1}
-                    </Badge>
+                  <div className="relative h-80 bg-black flex items-center justify-center">
+                    <div className="h-full aspect-[9/16] relative overflow-hidden">
+                      <VideoThumbnail
+                        key={`${clip.clipIndex}-${clip.reprocessedAt || clip.lastUpdated || clip.downloadUrl}`}
+                        videoUrl={clip.downloadUrl}
+                        alt={clip.title || `${videoTitle}`}
+                        onClick={() => {
+                          setPreviewVideo({
+                            url: clip.downloadUrl,
+                            title: clip.title || `${videoTitle}`,
+                            index: clip.clipIndex
+                          });
+                        }}
+                        showPlayButton={true}
+                        cachedThumbnail={clip.cachedThumbnail}
+                        onThumbnailGenerated={(thumbnailUrl, timestamp) =>
+                          handleThumbnailGenerated(clip.clipIndex, thumbnailUrl, timestamp)
+                        }
+                      />
+                    </div>
                     {clip.virality_score !== undefined && (
-                      <div className="absolute top-2 left-2 z-10 text-sm font-semibold text-white drop-shadow-lg">
-                        🔥 {clip.virality_score}
+                      <div className="absolute top-2 left-2 z-10">
+                        <span className="text-sm font-bold text-green-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                          🔥 {clip.virality_score}
+                        </span>
+                      </div>
+                    )}
+                    {/* Duration overlay at bottom-right */}
+                    {clip.duration && (
+                      <div className="absolute bottom-2 right-2 z-10 bg-black/70 text-white px-2 py-1 rounded text-xs font-medium">
+                        {formatDuration(clip.duration)}
                       </div>
                     )}
                     {/* Like/Dislike overlay buttons */}
@@ -1140,12 +1263,6 @@ export default function ProjectDetails() {
                       </div>
                     )} */}
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3 flex-wrap">
-                      {clip.duration && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          <span>{formatDuration(clip.duration)}</span>
-                        </div>
-                      )}
                       {(clip.templateId || clip.template_id) && (
                         <Badge variant="secondary" className="text-xs">
                           <Palette className="h-2.5 w-2.5 mr-1" />
@@ -1159,71 +1276,127 @@ export default function ProjectDetails() {
                         </Badge>
                       )}
                     </div>
-                    <div className="flex gap-2 mb-2">
-                      <Button
-                        onClick={() => {
-                          setEditorClip({
-                            url: clip.downloadUrl,
-                            title: clip.title || `${videoTitle} - Clip ${clip.clipIndex + 1}`,
-                            index: clip.clipIndex,
-                            editorState: (clip as any).editorState,
-                          });
-                          setEditorOpen(true);
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                      >
-                        <Edit3 className="h-3 w-3 mr-1" />
-                        Edit
-                      </Button>
-                      <a
-                        href={clip.downloadUrl}
-                        download
-                        className="flex-1"
-                      >
-                        <Button variant="outline" size="sm" className="w-full">
-                          <Download className="h-3 w-3 mr-1" />
-                          Download
+                    {isAdmin && (
+                      <div className="flex gap-2 mb-2">
+                        <Button
+                          onClick={() => {
+                            setEditorClip({
+                              url: clip.downloadUrl,
+                              title: clip.title || `${videoTitle}`,
+                              index: clip.clipIndex,
+                              editorState: (clip as any).editorState,
+                            });
+                            setEditorOpen(true);
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                        >
+                          <Edit3 className="h-3 w-3 mr-1" />
+                          Edit
                         </Button>
-                      </a>
-                    </div>
-                    <div className="flex gap-2 mb-2">
-                      <Button
-                        onClick={() => openTemplateModal(clip.clipIndex)}
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        disabled={isReprocessing(clip.clipIndex)}
-                      >
-                        {isReprocessing(clip.clipIndex) ? (
-                          <>
-                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <Palette className="h-3 w-3 mr-1" />
-                            Template
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                    <div>
-                      <Button
-                        onClick={() => setYoutubePostClip({
-                          url: clip.downloadUrl,
-                          title: clip.title || `${videoTitle} - Clip ${clip.clipIndex + 1}`,
-                          index: clip.clipIndex
-                        })}
-                        variant="default"
-                        size="sm"
-                        className="w-full bg-red-600 hover:bg-red-700 text-white"
-                      >
-                        <Youtube className="h-3 w-3 mr-1" />
-                        Post to YouTube
-                      </Button>
-                    </div>
+                        <a
+                          href={clip.downloadUrl}
+                          download
+                          className="flex-1"
+                        >
+                          <Button variant="outline" size="sm" className="w-full">
+                            <Download className="h-3 w-3 mr-1" />
+                            Download
+                          </Button>
+                        </a>
+                      </div>
+                    )}
+                    {!isAdmin && (
+                      <>
+                        <div className="flex gap-2 mb-2">
+                          <Button
+                            onClick={() => openTemplateModal(clip.clipIndex)}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            disabled={isReprocessing(clip.clipIndex)}
+                          >
+                            {isReprocessing(clip.clipIndex) ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <Palette className="h-3 w-3 mr-1" />
+                                Change Font
+                              </>
+                            )}
+                          </Button>
+                          <a
+                            href={clip.downloadUrl}
+                            download
+                            className="flex-1"
+                          >
+                            <Button variant="outline" size="sm" className="w-full">
+                              <Download className="h-3 w-3 mr-1" />
+                              Download
+                            </Button>
+                          </a>
+                        </div>
+                        <div>
+                          <Button
+                            onClick={() => setYoutubePostClip({
+                              url: clip.downloadUrl,
+                              title: clip.title || `${videoTitle}`,
+                              index: clip.clipIndex
+                            })}
+                            variant="default"
+                            size="sm"
+                            className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            <Youtube className="h-3 w-3 mr-1" />
+                            Post to YouTube
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                    {isAdmin && (
+                      <>
+                        <div className="flex gap-2 mb-2">
+                          <Button
+                            onClick={() => openTemplateModal(clip.clipIndex)}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            disabled={isReprocessing(clip.clipIndex)}
+                          >
+                            {isReprocessing(clip.clipIndex) ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <Palette className="h-3 w-3 mr-1" />
+                                Change Font
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        <div>
+                          <Button
+                            onClick={() => setYoutubePostClip({
+                              url: clip.downloadUrl,
+                              title: clip.title || `${videoTitle}`,
+                              index: clip.clipIndex
+                            })}
+                            variant="default"
+                            size="sm"
+                            className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            <Youtube className="h-3 w-3 mr-1" />
+                            Post to YouTube
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
                 </motion.div>

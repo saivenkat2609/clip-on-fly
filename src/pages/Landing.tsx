@@ -6,6 +6,7 @@ import { PricingPlans } from "@/components/PricingPlans";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useVideos } from "@/hooks/useVideos";
 import {
   Upload,
   Wand2,
@@ -102,16 +103,13 @@ export default function Landing() {
   const { currentUser, loading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect to dashboard if already logged in (unless coming from login)
+  // Check if user should be redirected to billing after login
   useEffect(() => {
     if (!loading && currentUser) {
-      // Check if user just logged in and should go to billing
       const shouldRedirectToBilling = sessionStorage.getItem('redirectToBilling');
       if (shouldRedirectToBilling === 'true') {
         sessionStorage.removeItem('redirectToBilling');
         navigate('/billing', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
       }
     }
   }, [currentUser, loading, navigate]);
@@ -126,9 +124,13 @@ export default function Landing() {
     }
   };
 
-  // Show nothing while checking auth or if redirecting
-  if (loading || currentUser) {
-    return null;
+  // Show loading spinner while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
@@ -199,12 +201,20 @@ export default function Landing() {
 
             {/* Auth Buttons */}
             <div className="flex items-center gap-4">
-              <Link to="/login">
-                <Button variant="ghost" className="hidden sm:inline-flex">Sign In</Button>
-              </Link>
-              <Link to="/login">
-                <Button className="gradient-primary">Get Started</Button>
-              </Link>
+              {currentUser ? (
+                <Link to="/dashboard">
+                  <Button className="gradient-primary">My Dashboard</Button>
+                </Link>
+              ) : (
+                <>
+                  <Link to="/login">
+                    <Button variant="ghost" className="hidden sm:inline-flex">Sign In</Button>
+                  </Link>
+                  <Link to="/login">
+                    <Button className="gradient-primary">Get Started</Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -265,12 +275,21 @@ export default function Landing() {
 
               <div className="flex flex-col items-center mb-16">
                 <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-                  <Link to="/login">
-                    <Button size="lg" className="gradient-primary shadow-glow text-lg h-16 px-10 font-semibold">
-                      <Sparkles className="h-5 w-5 mr-2" />
-                      Start Free Trial
-                    </Button>
-                  </Link>
+                  {currentUser ? (
+                    <Link to="/dashboard">
+                      <Button size="lg" className="gradient-primary shadow-glow text-lg h-16 px-10 font-semibold">
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Go to Dashboard
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link to="/login">
+                      <Button size="lg" className="gradient-primary shadow-glow text-lg h-16 px-10 font-semibold">
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Start Free Trial
+                      </Button>
+                    </Link>
+                  )}
                   <Button size="lg" variant="outline" className="text-lg h-16 px-10 font-semibold border-2 border-primary/30 hover:bg-primary/10 hover:border-primary hover:text-primary transition-all">
                     <Video className="h-5 w-5 mr-2" />
                     Watch Demo
@@ -640,12 +659,21 @@ export default function Landing() {
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Link to="/login">
-                    <Button size="lg" variant="secondary" className="text-lg h-16 px-10 font-semibold shadow-2xl hover:scale-105 transition-transform">
-                      <Sparkles className="h-5 w-5 mr-2" />
-                      Start Creating Now
-                    </Button>
-                  </Link>
+                  {currentUser ? (
+                    <Link to="/dashboard">
+                      <Button size="lg" variant="secondary" className="text-lg h-16 px-10 font-semibold shadow-2xl hover:scale-105 transition-transform">
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Go to Dashboard
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link to="/login">
+                      <Button size="lg" variant="secondary" className="text-lg h-16 px-10 font-semibold shadow-2xl hover:scale-105 transition-transform">
+                        <Sparkles className="h-5 w-5 mr-2" />
+                        Start Creating Now
+                      </Button>
+                    </Link>
+                  )}
                   <Button size="lg" variant="outline" className="text-lg h-16 px-10 font-semibold bg-white/10 border-2 border-white/30 text-white hover:bg-white/25 hover:border-white/60 backdrop-blur-sm transition-all">
                     <Video className="h-5 w-5 mr-2" />
                     Watch Demo

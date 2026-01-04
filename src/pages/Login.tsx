@@ -619,20 +619,92 @@ export default function Login() {
       )}
 
       {/* Navigation */}
-      <nav className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
+      <nav className="absolute top-0 left-0 right-0 z-10 bg-transparent">
+        <div className="container mx-auto px-6 py-6">
           <Link to="/" className="flex items-center gap-2 w-fit">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">NebulaAI</span>
+            <span className="text-xl font-bold text-foreground">NebulaAI</span>
           </Link>
         </div>
       </nav>
 
-      {/* Login/Signup Form */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-large">
+      {/* Split Screen Layout */}
+      <div className="flex-1 flex">
+        {/* Left Side - Visual Content */}
+        <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-primary/10 via-accent/5 to-primary/10 overflow-hidden">
+          {/* Animated Background */}
+          <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
+
+          {/* Content */}
+          <div className="relative z-10 flex flex-col justify-center items-center p-12 text-center">
+            <div className="max-w-lg space-y-8">
+              {/* Hero Icon */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full"></div>
+                  <div className="relative flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/80 shadow-2xl">
+                    <Sparkles className="h-12 w-12 text-primary-foreground" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Heading */}
+              <div className="space-y-3">
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+                  Transform Videos into Viral Clips
+                </h1>
+                <p className="text-lg text-muted-foreground">
+                  AI-powered video editing that turns long-form content into engaging short clips automatically
+                </p>
+              </div>
+
+              {/* Features */}
+              <div className="grid gap-4 text-left mt-8">
+                {[
+                  { icon: '⚡', title: 'Lightning Fast', desc: 'Process videos in minutes, not hours' },
+                  { icon: '🎨', title: 'Beautiful Templates', desc: 'Professional designs for every platform' },
+                  { icon: '🚀', title: 'Boost Engagement', desc: 'Maximize reach with optimized clips' }
+                ].map((feature, i) => (
+                  <div key={i} className="flex items-start gap-3 p-4 rounded-lg bg-background/50 backdrop-blur border border-border/50">
+                    <span className="text-2xl">{feature.icon}</span>
+                    <div>
+                      <h3 className="font-semibold">{feature.title}</h3>
+                      <p className="text-sm text-muted-foreground">{feature.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Social Proof */}
+              <div className="flex items-center justify-center gap-2 pt-4">
+                <div className="flex -space-x-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <img
+                      key={i}
+                      src={`/avatars/avatar${i}.png`}
+                      alt={`Creator ${i}`}
+                      className="h-8 w-8 rounded-full border-2 border-background object-cover"
+                    />
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Join <span className="font-semibold text-foreground">500+</span> creators
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Decorative Elements */}
+          <div className="absolute top-10 right-10 h-64 w-64 bg-primary/10 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-10 left-10 h-64 w-64 bg-accent/10 rounded-full blur-3xl"></div>
+        </div>
+
+        {/* Right Side - Form */}
+        <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-background">
+          <div className="w-full max-w-md">
+            <Card className="shadow-2xl border-border/50">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">
               {isSignUp ? 'Create an account' : 'Welcome back'}
@@ -984,6 +1056,8 @@ export default function Login() {
             )}
           </CardFooter>
         </Card>
+          </div>
+        </div>
       </div>
 
       {/* Account Linking Modal */}
