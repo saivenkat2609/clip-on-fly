@@ -26,6 +26,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import CookiePolicy from "./pages/CookiePolicy";
 import RefundPolicy from "./pages/RefundPolicy";
+import ShippingPolicy from "./pages/ShippingPolicy";
 import Contact from "./pages/Contact";
 
 // Configure React Query with optimal caching settings
@@ -66,6 +67,7 @@ const App = () => (
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/cookies" element={<CookiePolicy />} />
               <Route path="/refund" element={<RefundPolicy />} />
+              <Route path="/shipping" element={<ShippingPolicy />} />
               <Route path="/contact" element={<Contact />} />
 
               {/* Protected routes */}
