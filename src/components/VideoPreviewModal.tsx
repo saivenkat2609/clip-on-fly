@@ -24,7 +24,7 @@ export function VideoPreviewModal({
         <DialogHeader className="space-y-4">
           <div className="flex items-start justify-between">
             <DialogTitle className="text-xl font-bold pr-8">
-              {videoTitle} - Clip {clipIndex + 1}
+              {videoTitle}
             </DialogTitle>
           </div>
 

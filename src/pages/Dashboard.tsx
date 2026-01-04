@@ -145,6 +145,18 @@ export default function Dashboard() {
 
   // Use cached hooks - ONLY Dashboard gets real-time updates for video processing status
   const { data: videos = [], isLoading: loading, error: queryError } = useVideos({ realTime: true });
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[Dashboard] Videos data:', {
+      videos,
+      count: videos.length,
+      loading,
+      error: queryError,
+      currentUser: currentUser?.uid
+    });
+  }, [videos, loading, queryError, currentUser]);
+
   const { data: userProfile } = useUserProfileRealtime();
   const { plan: userPlan = "Free", totalCredits = 30, creditsExpiryDate, isLoading: loadingCredits } = useUserPlanRealtime();
 
@@ -273,12 +285,8 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">My Projects</h1>
-              <p className="text-muted-foreground">Manage and edit your video projects</p>
-            </div>
-            {/* Live Connection Indicator */}
-            {import.meta.env.VITE_ENABLE_WEBSOCKET === 'true' && processingVideos.length > 0 && (
+            {/* Live Connection Indicator - ONLY visible for admin users */}
+            {isAdmin && import.meta.env.VITE_ENABLE_WEBSOCKET === 'true' && processingVideos.length > 0 && (
               <Badge
                 variant={isConnected ? "default" : "secondary"}
                 className={`${

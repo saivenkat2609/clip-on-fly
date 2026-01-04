@@ -8,6 +8,8 @@ interface VideoThumbnailProps {
   alt: string;
   onClick?: () => void;
   showPlayButton?: boolean;
+  cachedThumbnail?: string;  // Pre-generated thumbnail to use
+  onThumbnailGenerated?: (thumbnail: string, timestamp: number) => void;  // Callback when new thumbnail is generated
 }
 
 /**
@@ -45,12 +47,14 @@ const VideoThumbnailComponent = ({
   youtubeUrl,
   alt,
   onClick,
-  showPlayButton = true
+  showPlayButton = true,
+  cachedThumbnail,
+  onThumbnailGenerated
 }: VideoThumbnailProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [thumbnailUrl, setThumbnailUrl] = useState<string>("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>(cachedThumbnail || "");
+  const [isLoading, setIsLoading] = useState(!cachedThumbnail);
   const [useYouTubeThumbnail, setUseYouTubeThumbnail] = useState<string | null>(null);
 
   // Check if we should use YouTube thumbnail
@@ -77,10 +81,16 @@ const VideoThumbnailComponent = ({
     setUseYouTubeThumbnail(null);
   }, [youtubeThumbnail, youtubeUrl]);
 
-  // Video frame extraction (only if not using YouTube thumbnail)
+  // Video frame extraction (only if not using YouTube thumbnail and no cached thumbnail)
   useEffect(() => {
     // Skip frame extraction if using YouTube thumbnail
     if (useYouTubeThumbnail !== null) {
+      return;
+    }
+
+    // Skip if we have a cached thumbnail
+    if (cachedThumbnail) {
+      console.log('[VideoThumbnail] Using cached thumbnail, skipping extraction');
       return;
     }
 
@@ -97,13 +107,47 @@ const VideoThumbnailComponent = ({
       return;
     }
 
+    let attemptedTimes: number[] = [];
+    let currentAttempt = 0;
+
     const handleLoadedData = () => {
       try {
-        // Seek to 0.5 seconds to get a better frame (skip black frames)
-        video.currentTime = 0.5;
+        // Try multiple timestamps to find a good frame (not black)
+        const timestamps = [2, 3, 1.5, 4, 0.5];
+        attemptedTimes = timestamps.map(t => Math.min(t, video.duration - 0.1));
+
+        console.log(`[VideoThumbnail] Video duration: ${video.duration}s, trying timestamps:`, attemptedTimes);
+
+        // Start with first timestamp
+        currentAttempt = 0;
+        video.currentTime = attemptedTimes[currentAttempt];
       } catch (error) {
+        console.error("[VideoThumbnail] Error in handleLoadedData:", error);
         setIsLoading(false);
       }
+    };
+
+    const isFrameBlack = (ctx: CanvasRenderingContext2D, width: number, height: number): boolean => {
+      // Sample pixels to check if frame is too dark/black
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+
+      let totalBrightness = 0;
+      const sampleSize = 1000; // Sample 1000 pixels
+      const step = Math.floor(data.length / (sampleSize * 4));
+
+      for (let i = 0; i < data.length; i += step * 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        totalBrightness += (r + g + b) / 3;
+      }
+
+      const avgBrightness = totalBrightness / sampleSize;
+      console.log(`[VideoThumbnail] Average brightness at ${video.currentTime}s: ${avgBrightness}`);
+
+      // If average brightness is below 30 (out of 255), consider it too dark
+      return avgBrightness < 30;
     };
 
     const handleSeeked = () => {
@@ -117,10 +161,25 @@ const VideoThumbnailComponent = ({
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+          // Check if frame is too dark/black
+          if (isFrameBlack(ctx, canvas.width, canvas.height) && currentAttempt < attemptedTimes.length - 1) {
+            console.log(`[VideoThumbnail] Frame at ${attemptedTimes[currentAttempt]}s is too dark, trying next timestamp`);
+            currentAttempt++;
+            video.currentTime = attemptedTimes[currentAttempt];
+            return; // Wait for next seeked event
+          }
+
           // Convert to data URL
           const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+          const usedTimestamp = video.currentTime;
+          console.log(`[VideoThumbnail] Successfully extracted thumbnail at ${usedTimestamp}s`);
           setThumbnailUrl(dataUrl);
           setIsLoading(false);
+
+          // Call callback to save thumbnail
+          if (onThumbnailGenerated) {
+            onThumbnailGenerated(dataUrl, usedTimestamp);
+          }
         } else {
           console.error("[VideoThumbnail] Could not get canvas 2d context");
           setIsLoading(false);
@@ -157,7 +216,7 @@ const VideoThumbnailComponent = ({
       video.removeEventListener("seeked", handleSeeked);
       video.removeEventListener("error", handleError);
     };
-  }, [videoUrl, useYouTubeThumbnail]);
+  }, [videoUrl, useYouTubeThumbnail, cachedThumbnail]);
 
   return (
     <div
@@ -250,6 +309,7 @@ export const VideoThumbnail = memo(VideoThumbnailComponent, (prevProps, nextProp
     prevProps.youtubeUrl === nextProps.youtubeUrl &&
     prevProps.alt === nextProps.alt &&
     prevProps.showPlayButton === nextProps.showPlayButton &&
-    prevProps.onClick === nextProps.onClick
+    prevProps.onClick === nextProps.onClick &&
+    prevProps.cachedThumbnail === nextProps.cachedThumbnail
   );
 });
