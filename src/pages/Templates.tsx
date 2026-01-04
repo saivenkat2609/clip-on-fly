@@ -147,6 +147,57 @@ export default function Templates() {
                         alt={template.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-smooth"
                       />
+                      {/* Sample Caption Text Overlay - Word by Word */}
+                      <div
+                        className={`absolute left-0 right-0 px-4 pointer-events-none ${
+                          template.style.captionPosition === 'top' ? 'top-8' :
+                          template.style.captionPosition === 'middle' ? 'top-1/2 -translate-y-1/2' :
+                          'bottom-20'
+                        }`}
+                        style={{
+                          textAlign: template.style.captionAlignment,
+                          display: 'flex',
+                          justifyContent: template.style.captionAlignment === 'center' ? 'center' :
+                                         template.style.captionAlignment === 'right' ? 'flex-end' : 'flex-start'
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontFamily: template.style.captionFont,
+                            fontSize: 'clamp(0.7rem, 2vw, 1rem)',
+                            fontWeight: template.style.captionFontWeight,
+                            backgroundColor: template.style.captionBackgroundColor,
+                            opacity: template.style.captionBackgroundOpacity || 1,
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: template.style.captionBorderRadius || '0.5rem',
+                            textShadow: template.style.captionTextShadow,
+                            letterSpacing: template.style.captionLetterSpacing,
+                            lineHeight: template.style.captionLineHeight || '1.3',
+                            maxWidth: '85%',
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.3rem'
+                          }}
+                        >
+                          {(template.category === 'Professional' ? ['YOUR', 'MESSAGE', 'HERE'] :
+                            template.category === 'Creative' ? ['THIS', 'IS', 'AMAZING'] :
+                            template.category === 'Tech' ? ['FUTURE', 'OF', 'TECH'] :
+                            ['LIVE', 'YOUR', 'BEST']).map((word, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                color: idx === 1 ? (template.style.highlightColor || template.style.captionColor) : template.style.captionColor,
+                                fontWeight: idx === 1 ? (template.style.highlightFontWeight || template.style.captionFontWeight) : template.style.captionFontWeight,
+                                backgroundColor: idx === 1 ? template.style.highlightBackgroundColor : 'transparent',
+                                padding: idx === 1 && template.style.highlightBackgroundColor ? '0.1rem 0.3rem' : '0',
+                                borderRadius: '0.2rem'
+                              }}
+                            >
+                              {word}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-smooth">
                         <div className="absolute bottom-4 left-4 right-4">
                           <Button className={canAccess ? "w-full gradient-primary" : "w-full bg-muted text-muted-foreground"}>
@@ -240,6 +291,57 @@ export default function Templates() {
                         alt={template.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-smooth"
                       />
+                      {/* Sample Caption Text Overlay - Word by Word */}
+                      <div
+                        className={`absolute left-0 right-0 px-3 pointer-events-none ${
+                          template.style.captionPosition === 'top' ? 'top-6' :
+                          template.style.captionPosition === 'middle' ? 'top-1/2 -translate-y-1/2' :
+                          'bottom-16'
+                        }`}
+                        style={{
+                          textAlign: template.style.captionAlignment,
+                          display: 'flex',
+                          justifyContent: template.style.captionAlignment === 'center' ? 'center' :
+                                         template.style.captionAlignment === 'right' ? 'flex-end' : 'flex-start'
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontFamily: template.style.captionFont,
+                            fontSize: 'clamp(0.6rem, 1.8vw, 0.85rem)',
+                            fontWeight: template.style.captionFontWeight,
+                            backgroundColor: template.style.captionBackgroundColor,
+                            opacity: template.style.captionBackgroundOpacity || 1,
+                            padding: '0.35rem 0.7rem',
+                            borderRadius: template.style.captionBorderRadius || '0.5rem',
+                            textShadow: template.style.captionTextShadow,
+                            letterSpacing: template.style.captionLetterSpacing,
+                            lineHeight: template.style.captionLineHeight || '1.3',
+                            maxWidth: '85%',
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.25rem'
+                          }}
+                        >
+                          {(template.category === 'Professional' ? ['YOUR', 'MESSAGE'] :
+                            template.category === 'Creative' ? ['THIS', 'IS'] :
+                            template.category === 'Tech' ? ['FUTURE', 'TECH'] :
+                            ['LIVE', 'BEST']).map((word, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                color: idx === 1 ? (template.style.highlightColor || template.style.captionColor) : template.style.captionColor,
+                                fontWeight: idx === 1 ? (template.style.highlightFontWeight || template.style.captionFontWeight) : template.style.captionFontWeight,
+                                backgroundColor: idx === 1 ? template.style.highlightBackgroundColor : 'transparent',
+                                padding: idx === 1 && template.style.highlightBackgroundColor ? '0.1rem 0.25rem' : '0',
+                                borderRadius: '0.2rem'
+                              }}
+                            >
+                              {word}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-smooth">
                         <div className="absolute bottom-4 left-4 right-4">
                           <Button
