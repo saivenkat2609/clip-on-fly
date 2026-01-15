@@ -5,7 +5,9 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { VideoStatusWebSocket, WebSocketMessage, createVideoWebSocket } from '../lib/websocket';
+import { apiClient } from '../lib/apiClient';
 
 export interface UseWebSocketOptions {
   sessionId: string;
@@ -179,8 +181,24 @@ export function useVideoStatus(options: UseVideoStatusOptions) {
   const [status, setStatus] = useState<string>('pending');
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [usePolling, setUsePolling] = useState(false);
+  const [wsFailureCount, setWsFailureCount] = useState(0);
 
-  console.log('[useVideoStatus] Initialized:', { sessionId, enabled });
+  console.log('[useVideoStatus] Initialized:', { sessionId, enabled, usePolling });
+
+  // WebSocket error handler with fallback logic
+  const handleWebSocketError = useCallback((error: Event) => {
+    console.error('[useVideoStatus] WebSocket error:', error);
+    setWsFailureCount((prev) => {
+      const newCount = prev + 1;
+      // Fall back to polling after 3 consecutive failures
+      if (newCount >= 3) {
+        console.warn('[useVideoStatus] WebSocket failed 3 times, falling back to polling');
+        setUsePolling(true);
+      }
+      return newCount;
+    });
+  }, []);
 
   const handleMessage = useCallback((data: WebSocketMessage) => {
     console.log('[useVideoStatus] 📥 Message received:', {
@@ -189,6 +207,9 @@ export function useVideoStatus(options: UseVideoStatusOptions) {
       progress: data.data?.progress,
       fullData: data
     });
+
+    // Reset failure count on successful message
+    setWsFailureCount(0);
 
     // Update status (keep as-is, can be number or string)
     if (data.status !== undefined) {
@@ -245,18 +266,93 @@ export function useVideoStatus(options: UseVideoStatusOptions) {
     }
   }, [onComplete, onProgress, onErrorCallback]);
 
+  // WebSocket connection (only if not using polling)
   const ws = useWebSocket({
     sessionId,
     onMessage: handleMessage,
-    enabled
+    onError: handleWebSocketError,
+    enabled: enabled && !usePolling
   });
 
-  console.log('[useVideoStatus] Current state:', { status, progress, error, isConnected: ws.isConnected });
+  // Polling fallback using React Query
+  const { data: pollingData, error: pollingError } = useQuery({
+    queryKey: ['video-status-polling', sessionId],
+    queryFn: async () => {
+      console.log('[useVideoStatus] 🔄 Polling status for session:', sessionId);
+      try {
+        const response = await apiClient.get(`/status/${sessionId}`);
+        console.log('[useVideoStatus] 📊 Polling response:', response);
+        return response;
+      } catch (err) {
+        console.error('[useVideoStatus] ❌ Polling error:', err);
+        throw err;
+      }
+    },
+    enabled: enabled && usePolling && !!sessionId,
+    refetchInterval: (data) => {
+      // Stop polling when video is completed or failed
+      if (data?.status === 'completed' || data?.status === 'failed') {
+        return false;
+      }
+      return 3000; // Poll every 3 seconds
+    },
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000)
+  });
+
+  // Update status from polling data
+  useEffect(() => {
+    if (!usePolling || !pollingData) return;
+
+    console.log('[useVideoStatus] 📊 Updating from polling data:', pollingData);
+
+    if (pollingData.status) {
+      setStatus(pollingData.status);
+    }
+
+    if (pollingData.progress !== undefined) {
+      setProgress(pollingData.progress);
+    }
+
+    if (pollingData.error) {
+      setError(pollingData.error);
+    }
+
+    // Trigger callbacks based on status
+    if (pollingData.status === 'completed' && onComplete) {
+      onComplete({ event: 'processing_complete', status: 'completed', data: pollingData } as WebSocketMessage);
+    }
+
+    if (pollingData.status === 'failed' && onErrorCallback) {
+      onErrorCallback({ event: 'processing_error', status: 'failed', data: { error: pollingData.error } } as WebSocketMessage);
+    }
+
+    if (pollingData.status === 'processing' && onProgress) {
+      onProgress({ event: 'processing_progress', status: 'processing', data: { progress: pollingData.progress } } as WebSocketMessage);
+    }
+  }, [pollingData, usePolling, onComplete, onProgress, onErrorCallback]);
+
+  // Handle polling errors
+  useEffect(() => {
+    if (pollingError) {
+      console.error('[useVideoStatus] ❌ Polling error:', pollingError);
+      setError('Failed to fetch video status');
+    }
+  }, [pollingError]);
+
+  console.log('[useVideoStatus] Current state:', {
+    status,
+    progress,
+    error,
+    isConnected: ws.isConnected,
+    connectionType: usePolling ? 'polling' : 'websocket'
+  });
 
   return {
     ...ws,
     status,
     progress,
-    error
+    error,
+    connectionType: usePolling ? 'polling' : 'websocket' // Expose connection type for debugging
   };
 }

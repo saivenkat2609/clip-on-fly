@@ -12,7 +12,8 @@ import { TemplateSelectionModal } from "@/components/TemplateSelectionModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTrackVideoUsage } from "@/hooks/useSubscription";
 import { useUserProfileRealtime } from "@/hooks/useUserProfile";
-import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette, RefreshCw, CheckCircle2, Circle, ArrowDownToLine, MessageSquare, Sparkles, Video, Edit3, Check, X } from "lucide-react";
+import { useRefreshVideoStatus } from "@/hooks/useRefreshVideoStatus";
+import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette, RefreshCw, CheckCircle2, Circle, ArrowDownToLine, MessageSquare, Sparkles, Video, Edit3, Check, X, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -149,6 +150,9 @@ export default function ProjectDetails() {
   const trackVideoUsage = useTrackVideoUsage();
   const hasTrackedUsageRef = useRef(false);
   const trackingInProgressRef = useRef(false);
+
+  // LAYER 3 RESILIENCE: Refresh status hook for stuck videos
+  const { refreshStatus, isRefreshing } = useRefreshVideoStatus();
 
   // Real-time WebSocket updates for progress
   const wsEnabled = !!sessionId && (!video || video?.status === 'processing');
@@ -355,6 +359,35 @@ export default function ProjectDetails() {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // LAYER 3 RESILIENCE: Check if video is stuck
+  const isVideoStuck = useMemo(() => {
+    if (!video || video.status !== 'processing') return false;
+    if (!video.createdAt) return false;
+
+    // Calculate minutes since creation
+    const createdDate = video.createdAt.toDate ? video.createdAt.toDate() : new Date(video.createdAt);
+    const minutesSinceCreation = (Date.now() - createdDate.getTime()) / 1000 / 60;
+
+    // Consider stuck if processing > 15 minutes
+    return minutesSinceCreation > 15;
+  }, [video?.status, video?.createdAt]);
+
+  // LAYER 3 RESILIENCE: Handle refresh status button click
+  const handleRefreshStatus = async () => {
+    if (!currentUser || !sessionId || !video) return;
+
+    console.log('[ProjectDetails] Refreshing video status from S3...');
+
+    const result = await refreshStatus(currentUser.uid, sessionId);
+
+    if (result.success) {
+      console.log(`[ProjectDetails] ✓ Status refreshed: ${result.clips.length} clips`);
+      // Firestore listener will automatically update the UI
+    } else {
+      console.error(`[ProjectDetails] Failed to refresh status:`, result.error);
+    }
   };
 
   // Handle title editing
@@ -960,7 +993,57 @@ export default function ProjectDetails() {
                             </p>
                           </div>
                         </div>
+
+                        {/* LAYER 3 RESILIENCE: Refresh Status Button */}
+                        {isVideoStuck && (
+                          <div className="flex flex-col items-end gap-2">
+                            <Button
+                              onClick={handleRefreshStatus}
+                              disabled={isRefreshing}
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                            >
+                              {isRefreshing ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Checking...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="h-4 w-4" />
+                                  Refresh Status
+                                </>
+                              )}
+                            </Button>
+                            <p className="text-xs text-muted-foreground">
+                              Taking longer than usual?
+                            </p>
+                          </div>
+                        )}
                       </div>
+
+                      {/* LAYER 3 RESILIENCE: Stuck Video Warning */}
+                      {isVideoStuck && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg"
+                        >
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 space-y-2">
+                              <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                                Processing is taking longer than expected
+                              </p>
+                              <p className="text-xs text-amber-700 dark:text-amber-400">
+                                Your clips may already be ready. Click "Refresh Status" to check if processing has completed.
+                                If clips are ready, they'll appear immediately.
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
                     </div>
 
                     {/* Vertical Stepper - Similar to Reference Image */}

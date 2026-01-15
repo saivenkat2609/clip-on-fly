@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Link as LinkIcon, Sparkles, Type, Crop, Loader2, FileVideo, X, Palette, CheckCircle2, Clock, Smartphone, Monitor, Youtube, Layers } from "lucide-react";
+import { Upload, Link as LinkIcon, Sparkles, Type, Crop, Loader2, FileVideo, X, Palette, CheckCircle2, Clock, Smartphone, Monitor, Youtube, Layers, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
@@ -16,6 +16,8 @@ import { apiClient } from "@/lib/apiClient";
 import { TemplateSelectionModal } from "@/components/TemplateSelectionModal";
 import { templates, Template } from "@/lib/templates";
 import { useRemainingCredits } from "@/hooks/useRemainingCredits";
+import { validateVideo, formatDuration, formatFileSize, VideoValidationResult } from "@/lib/videoValidator";
+import { useYouTubeValidation } from "@/hooks/useYouTubeValidation";
 import {
   Select,
   SelectContent,
@@ -26,7 +28,10 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { fadeInVariants, bounceVariants, slideUpVariants } from "@/lib/animations";
 
-const WORKER_UPLOAD_URL = import.meta.env.VITE_WORKER_UPLOAD_URL; // Cloudflare Worker URL
+// Use proxy in development, direct URL in production
+const WORKER_UPLOAD_URL = import.meta.env.MODE === 'development'
+  ? '/upload-proxy'  // Use Vite proxy in development
+  : import.meta.env.VITE_WORKER_UPLOAD_URL;  // Use direct URL in production
 
 // Generate UUID (simplified version)
 function generateUUID() {
@@ -68,14 +73,20 @@ export function UploadHero() {
   const [loading, setLoading] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [showUrlError, setShowUrlError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { currentUser } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // Video validation state (for file uploads)
+  const [validationResult, setValidationResult] = useState<VideoValidationResult | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+
   // Use shared credits calculation hook
   const remainingCredits = useRemainingCredits();
+
+  // YouTube URL validation with real-time feedback
+  const youtubeValidation = useYouTubeValidation(videoUrl);
 
   // Template selection state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('prof-modern-minimal');
@@ -87,46 +98,43 @@ export function UploadHero() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('auto'); // 'auto', '15', '30', '60'
   const [selectedNumClips, setSelectedNumClips] = useState<string>('4'); // '1', '2', '4', '6'
 
-  // SECURITY FIX: Enhanced YouTube URL validation to prevent injection attacks
-  const isValidYouTubeUrl = (url: string): boolean => {
-    if (!url || typeof url !== 'string') return false;
-
-    // Remove whitespace
-    const trimmedUrl = url.trim();
-    if (!trimmedUrl) return false;
-
-    // YouTube URL patterns - must be exactly 11 characters for video ID
-    // Supports:
-    // - https://www.youtube.com/watch?v=VIDEO_ID
-    // - https://youtube.com/watch?v=VIDEO_ID
-    // - https://youtu.be/VIDEO_ID
-    // - https://m.youtube.com/watch?v=VIDEO_ID
-    const youtubePatterns = [
-      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[\w-]{11}$/,
-      /^https?:\/\/youtu\.be\/[\w-]{11}$/,
-      /^https?:\/\/m\.youtube\.com\/watch\?v=[\w-]{11}$/,
-    ];
-
-    // Check if URL matches any valid pattern
-    return youtubePatterns.some(pattern => pattern.test(trimmedUrl));
-  };
-
   const handleQuickProcess = async () => {
     if (!videoUrl.trim()) {
       toast({
         title: "URL Required",
-        description: "Please enter a YouTube or Twitch URL to continue",
+        description: "Please enter a YouTube URL to continue",
         variant: "destructive",
       });
       return;
     }
 
-    if (!isValidYouTubeUrl(videoUrl)) {
+    // Check if validation is in progress
+    if (youtubeValidation.isValidating) {
       toast({
-        title: "Invalid URL",
-        description: "Please enter a valid YouTube URL",
+        title: "Validation in Progress",
+        description: "Please wait while we validate the video",
+      });
+      return;
+    }
+
+    // Check if URL is valid
+    if (!youtubeValidation.isValid) {
+      toast({
+        title: "Invalid Video",
+        description: youtubeValidation.error || "Please enter a valid YouTube URL",
         variant: "destructive",
       });
+      return;
+    }
+
+    // Check if user has enough credits for this video
+    if (youtubeValidation.creditsRequired > remainingCredits) {
+      toast({
+        title: "Insufficient Credits",
+        description: `This video requires ${youtubeValidation.creditsRequired} credits, but you only have ${remainingCredits} remaining.`,
+        variant: "destructive",
+      });
+      setTimeout(() => navigate("/billing"), 2000);
       return;
     }
 
@@ -227,37 +235,59 @@ export function UploadHero() {
     }
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    const validTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/x-matroska'];
-    if (!validTypes.includes(file.type)) {
-      toast({
-        title: "Invalid File Type",
-        description: "Please upload a video file (MP4, MOV, AVI, WebM, MKV)",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Validate file size (5GB max)
-    const maxSize = 5 * 1024 * 1024 * 1024;
-    if (file.size > maxSize) {
-      toast({
-        title: "File Too Large",
-        description: "Please upload a video smaller than 5GB",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setSelectedFile(file);
-    toast({
-      title: "File Selected",
-      description: `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`,
-    });
+    setIsValidating(true);
+    setValidationResult(null);
+
+    try {
+      // Validate video using HTML5 Video API
+      const result = await validateVideo(file);
+      setValidationResult(result);
+
+      if (!result.isValid) {
+        toast({
+          title: "Video Validation Failed",
+          description: result.errors[0],
+          variant: "destructive",
+        });
+      } else if (result.warnings.length > 0) {
+        toast({
+          title: "Video Selected with Warnings",
+          description: result.warnings[0],
+        });
+      } else {
+        toast({
+          title: "Video Validated Successfully",
+          description: `${file.name} (${formatFileSize(result.metadata.size)}, ${formatDuration(result.metadata.duration)})`,
+        });
+      }
+    } catch (error: any) {
+      console.error('[UploadHero] Validation error:', error);
+      toast({
+        title: "Validation Error",
+        description: error.message || "Failed to validate video",
+        variant: "destructive",
+      });
+      setValidationResult({
+        isValid: false,
+        errors: [error.message || "Failed to validate video"],
+        warnings: [],
+        metadata: {
+          duration: 0,
+          width: 0,
+          height: 0,
+          size: file.size,
+          type: file.type,
+          canPlay: false
+        }
+      });
+    } finally {
+      setIsValidating(false);
+    }
   };
 
   const handleFileUpload = async () => {
@@ -266,6 +296,24 @@ export function UploadHero() {
         title: "No File Selected",
         description: "Please select a video file first",
         variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if video has been validated and is valid
+    if (!validationResult || !validationResult.isValid) {
+      toast({
+        title: "Invalid Video",
+        description: validationResult?.errors[0] || "Please select a valid video file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isValidating) {
+      toast({
+        title: "Validation In Progress",
+        description: "Please wait for video validation to complete",
       });
       return;
     }
@@ -466,21 +514,11 @@ export function UploadHero() {
                     </div>
                     <Input
                       placeholder="Paste your YouTube URL here..."
-                      className={`h-14 pl-14 pr-4 text-base bg-background/60 border-border/60 hover:border-border/80 focus:border-primary/60 rounded-xl focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm hover:shadow transition-all ${
-                        showUrlError && videoUrl.trim() && !isValidYouTubeUrl(videoUrl) ? 'border-destructive/60 focus:border-destructive/60' : ''
-                      }`}
+                      className="h-14 pl-14 pr-4 text-base bg-background/60 border-border/60 hover:border-border/80 focus:border-primary/60 rounded-xl focus-visible:ring-2 focus-visible:ring-primary/50 shadow-sm hover:shadow transition-all"
                       value={videoUrl}
-                      onChange={(e) => {
-                        setVideoUrl(e.target.value);
-                        // Show error only after user has typed something and it's invalid
-                        if (e.target.value.trim() && !isValidYouTubeUrl(e.target.value)) {
-                          setShowUrlError(true);
-                        } else {
-                          setShowUrlError(false);
-                        }
-                      }}
+                      onChange={(e) => setVideoUrl(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !loading && remainingCredits > 0 && isValidYouTubeUrl(videoUrl)) {
+                        if (e.key === "Enter" && !loading && youtubeValidation.isValid && !youtubeValidation.isValidating && youtubeValidation.hasEnoughCredits) {
                           handleQuickProcess();
                         }
                       }}
@@ -491,7 +529,13 @@ export function UploadHero() {
                     size="lg"
                     className="h-14 px-8 gradient-primary text-base font-semibold shadow-md hover:shadow-lg hover:scale-[1.02] transition-all rounded-xl"
                     onClick={handleQuickProcess}
-                    disabled={loading || remainingCredits <= 0 || !isValidYouTubeUrl(videoUrl)}
+                    disabled={
+                      loading ||
+                      remainingCredits <= 0 ||
+                      !youtubeValidation.isValid ||
+                      youtubeValidation.isValidating ||
+                      !youtubeValidation.hasEnoughCredits
+                    }
                   >
                     {loading ? (
                       <>
@@ -507,20 +551,91 @@ export function UploadHero() {
                   </Button>
                 </div>
 
-                {/* URL Validation Error Message */}
-                <AnimatePresence>
-                  {showUrlError && videoUrl.trim() && !isValidYouTubeUrl(videoUrl) && (
+                {/* Real-time Validation Feedback */}
+                <AnimatePresence mode="wait">
+                  {videoUrl && !loading && (
                     <motion.div
-                      initial={{ opacity: 0, y: -10, height: 0 }}
-                      animate={{ opacity: 1, y: 0, height: "auto" }}
-                      exit={{ opacity: 0, y: -10, height: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="flex items-start gap-2 px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-lg"
+                      key={
+                        youtubeValidation.isValidating
+                          ? 'validating'
+                          : youtubeValidation.isValid
+                          ? 'valid'
+                          : 'error'
+                      }
+                      variants={slideUpVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      className="mt-3"
                     >
-                      <Youtube className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-destructive font-medium">
-                        Please enter a valid YouTube URL (e.g., youtube.com/watch?v=... or youtu.be/...)
-                      </p>
+                      {/* Validating State */}
+                      {youtubeValidation.isValidating && (
+                        <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                          <span className="text-sm text-blue-900 dark:text-blue-100">Validating video (checking duration and credits)...</span>
+                        </div>
+                      )}
+
+                      {/* Valid State - Show Video Info */}
+                      {!youtubeValidation.isValidating && youtubeValidation.isValid && youtubeValidation.videoInfo && (
+                        <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                          {/* Thumbnail */}
+                          {youtubeValidation.videoInfo.thumbnail && (
+                            <img
+                              src={youtubeValidation.videoInfo.thumbnail}
+                              alt="Video thumbnail"
+                              className="w-16 h-12 rounded object-cover flex-shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-green-900 dark:text-green-100 truncate">
+                                  {youtubeValidation.videoInfo.title}
+                                </p>
+                                <div className="mt-1 text-xs text-green-700 dark:text-green-400">
+                                  <span>By {youtubeValidation.videoInfo.author}</span>
+                                  {youtubeValidation.videoInfo.duration > 0 && (
+                                    <>
+                                      <span className="mx-2">•</span>
+                                      <span>{youtubeValidation.videoInfo.durationFormatted}</span>
+                                    </>
+                                  )}
+                                  {youtubeValidation.creditsRequired > 0 && (
+                                    <>
+                                      <span className="mx-2">•</span>
+                                      <span className="font-medium">{youtubeValidation.creditsRequired} credits required</span>
+                                    </>
+                                  )}
+                                </div>
+                                {youtubeValidation.hasEnoughCredits && youtubeValidation.creditsRequired > 0 && (
+                                  <p className="mt-1 text-xs text-green-600 dark:text-green-500 font-medium">
+                                    ✓ Ready to process
+                                  </p>
+                                )}
+                                {!youtubeValidation.hasEnoughCredits && youtubeValidation.creditsRequired > 0 && (
+                                  <p className="mt-1 text-xs text-red-600 dark:text-red-500 font-medium">
+                                    ⚠ Insufficient credits (need {youtubeValidation.creditsRequired}, have {remainingCredits})
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error State */}
+                      {!youtubeValidation.isValidating && !youtubeValidation.isValid && youtubeValidation.error && (
+                        <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+                          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                              {youtubeValidation.error}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

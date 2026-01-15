@@ -27,7 +27,11 @@ class APIClient {
   private defaultCacheTTL: number = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_ENDPOINT;
+    // Use proxy in development, direct URL in production
+    this.baseURL = import.meta.env.MODE === 'development'
+      ? '/api'  // Use Vite proxy in development (hides backend URL)
+      : import.meta.env.VITE_API_ENDPOINT;  // Use direct URL in production
+
     this.cache = new Map();
     this.inFlightRequests = new Map();
 
@@ -196,13 +200,13 @@ class APIClient {
    * Make a GET request to the API with caching, request deduplication, and retry logic
    * HIGH PRIORITY FIX #25: Added retry logic with exponential backoff
    * @param endpoint - API endpoint
-   * @param options - Cache options { ttl: cache TTL in ms, skipCache: skip cache }
+   * @param options - Cache options { ttl: cache TTL in ms, skipCache: skip cache, signal: AbortSignal for cancellation }
    */
   async get<T = any>(
     endpoint: string,
-    options: { ttl?: number; skipCache?: boolean } = {}
+    options: { ttl?: number; skipCache?: boolean; signal?: AbortSignal } = {}
   ): Promise<T> {
-    const { ttl = this.defaultCacheTTL, skipCache = false } = options;
+    const { ttl = this.defaultCacheTTL, skipCache = false, signal } = options;
     const cacheKey = `GET:${endpoint}`;
 
     // Check cache first (unless skipCache is true)
@@ -229,6 +233,7 @@ class APIClient {
           const response = await fetch(`${this.baseURL}${endpoint}`, {
             method: 'GET',
             headers,
+            signal, // Pass AbortSignal for request cancellation
           });
 
           // HIGH PRIORITY FIX #25: Check if we should retry
@@ -255,6 +260,12 @@ class APIClient {
 
           return data;
         } catch (error) {
+          // Don't retry if request was aborted
+          if (error instanceof Error && error.name === 'AbortError') {
+            this.inFlightRequests.delete(cacheKey);
+            throw error;
+          }
+
           // If it's a network error and we have retries left, retry
           if (attempt < maxRetries - 1 && error instanceof TypeError) {
             const delay = this.getRetryDelay(attempt);
@@ -398,6 +409,63 @@ class APIClient {
     }
 
     throw new Error(`DELETE ${endpoint} failed after ${maxRetries} attempts`);
+  }
+
+  /**
+   * LAYER 3 RESILIENCE FIX: Refresh video status from S3
+   *
+   * When a video is stuck in "processing" state but clips are ready in S3,
+   * this endpoint fetches result.json from S3 and syncs to Firestore.
+   *
+   * Use case: Firestore sync failed in finalize Lambda, but clips are ready
+   *
+   * @param sessionId - Video session ID
+   * @returns Result data from S3 with status "completed"
+   */
+  async refreshVideoStatus(sessionId: string): Promise<{
+    success: boolean;
+    status: string;
+    clips: any[];
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      console.log(`[API Client] Refreshing status for session: ${sessionId}`);
+
+      // Call backend endpoint to fetch from S3 and sync to Firestore
+      const result = await this.get(`/result/${sessionId}`, { skipCache: true });
+
+      console.log(`[API Client] ✓ Status refreshed:`, {
+        status: result.status,
+        clipsCount: result.clips?.length || 0
+      });
+
+      return {
+        success: true,
+        status: result.status,
+        clips: result.clips || [],
+        message: `Found ${result.clips?.length || 0} clips`
+      };
+    } catch (error: any) {
+      console.error(`[API Client] Failed to refresh status:`, error);
+
+      // Handle specific error cases
+      if (error.message?.includes('not found') || error.message?.includes('404')) {
+        return {
+          success: false,
+          status: 'not_ready',
+          clips: [],
+          error: 'Video is still processing. Please wait a few more minutes.'
+        };
+      }
+
+      return {
+        success: false,
+        status: 'error',
+        clips: [],
+        error: error.message || 'Failed to refresh status'
+      };
+    }
   }
 }
 

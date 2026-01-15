@@ -6,6 +6,21 @@
   NODE_VERSION = "18"
   SECRETS_SCAN_OMIT_PATHS = "dist/**,functions/**,.env.example"
 
+# API Proxy - uses environment variable
+[[redirects]]
+  from = "/api/*"
+  to = "{{VITE_API_ENDPOINT}}/:splat"
+  status = 200
+  force = true
+
+# Upload Proxy - uses environment variable
+[[redirects]]
+  from = "/upload-proxy/*"
+  to = "{{VITE_WORKER_UPLOAD_URL}}/:splat"
+  status = 200
+  force = true
+
+# SPA fallback - must be last
 [[redirects]]
   from = "/*"
   to = "/index.html"
