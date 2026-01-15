@@ -8,7 +8,7 @@ import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { UploadHero } from "@/components/UploadHero";
 import { FAQSection } from "@/components/FAQSection";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, Play, Calendar, Loader2, AlertCircle, Bell } from "lucide-react";
+import { Plus, Play, Calendar, Loader2, AlertCircle, Bell, AlertTriangle, RefreshCw } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
@@ -144,7 +144,7 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   // Use cached hooks - ONLY Dashboard gets real-time updates for video processing status
-  const { data: videos = [], isLoading: loading, error: queryError } = useVideos({ realTime: true });
+  const { data: videos = [], isLoading: loading, error: queryError, isError, refetch } = useVideos({ realTime: true });
 
   // Debug logging
   useEffect(() => {
@@ -264,9 +264,52 @@ export default function Dashboard() {
         {/* Email Verification Banner */}
         <EmailVerificationBanner />
 
-        {/* Error Alert */}
+        {/* Critical Error Display (when entire videos fetch fails) */}
+        {isError && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-6"
+          >
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="p-8 text-center">
+                <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-destructive" />
+                <h2 className="text-2xl font-bold mb-2">Failed to Load Videos</h2>
+                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  {queryError?.message || 'An error occurred while fetching your videos. Please try again.'}
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <Button
+                    onClick={() => refetch()}
+                    variant="default"
+                    size="lg"
+                    className="gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Try Again
+                  </Button>
+                  <Button
+                    onClick={() => window.location.reload()}
+                    variant="outline"
+                    size="lg"
+                    className="gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Reload Page
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground mt-4">
+                  If this problem persists, please contact support.
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* General Error Alert (for non-critical errors) */}
         <AnimatePresence mode="wait">
-          {error && (
+          {error && !isError && (
             <motion.div
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}

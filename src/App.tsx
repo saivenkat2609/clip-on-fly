@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,28 +7,33 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Landing from "./pages/Landing";
-import Features from "./pages/Features";
-import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPassword";
-import EmailValidator from "./pages/EmailValidator";
-import Dashboard from "./pages/Dashboard";
-import AllProjects from "./pages/AllProjects";
-import ProjectDetails from "./pages/ProjectDetails";
-import Upload from "./pages/Upload";
-import Editor from "./pages/Editor";
-import Templates from "./pages/Templates";
-import Billing from "./pages/Billing";
-import Settings from "./pages/Settings";
-import YouTubeCallback from "./pages/YouTubeCallback";
-import AdminUsers from "./pages/AdminUsers";
-import NotFound from "./pages/NotFound";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import TermsOfService from "./pages/TermsOfService";
-import CookiePolicy from "./pages/CookiePolicy";
-import RefundPolicy from "./pages/RefundPolicy";
-import ShippingPolicy from "./pages/ShippingPolicy";
-import Contact from "./pages/Contact";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+
+// Lazy load all route components for optimal code splitting
+// Each route will be loaded only when accessed, reducing initial bundle size
+const Landing = lazy(() => import("./pages/Landing"));
+const Features = lazy(() => import("./pages/Features"));
+const Login = lazy(() => import("./pages/Login"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const EmailValidator = lazy(() => import("./pages/EmailValidator"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const AllProjects = lazy(() => import("./pages/AllProjects"));
+const ProjectDetails = lazy(() => import("./pages/ProjectDetails"));
+const Upload = lazy(() => import("./pages/Upload"));
+const Editor = lazy(() => import("./pages/Editor"));
+const Templates = lazy(() => import("./pages/Templates"));
+const Billing = lazy(() => import("./pages/Billing"));
+const Settings = lazy(() => import("./pages/Settings"));
+const YouTubeCallback = lazy(() => import("./pages/YouTubeCallback"));
+const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
+const RefundPolicy = lazy(() => import("./pages/RefundPolicy"));
+const ShippingPolicy = lazy(() => import("./pages/ShippingPolicy"));
+const Contact = lazy(() => import("./pages/Contact"));
 
 // Configure React Query with optimal caching settings
 const queryClient = new QueryClient({
@@ -47,49 +53,53 @@ const queryClient = new QueryClient({
 });
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <ThemeProvider defaultTheme="ocean" defaultMode="light">
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<Landing />} />
-              <Route path="/features" element={<Features />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/email-validator" element={<EmailValidator />} />
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <ThemeProvider defaultTheme="ocean" defaultMode="light">
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Suspense fallback={<LoadingSpinner />}>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/" element={<Landing />} />
+                  <Route path="/features" element={<Features />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/email-validator" element={<EmailValidator />} />
 
-              {/* Legal pages */}
-              <Route path="/privacy" element={<PrivacyPolicy />} />
-              <Route path="/terms" element={<TermsOfService />} />
-              <Route path="/cookies" element={<CookiePolicy />} />
-              <Route path="/refund" element={<RefundPolicy />} />
-              <Route path="/shipping" element={<ShippingPolicy />} />
-              <Route path="/contact" element={<Contact />} />
+                  {/* Legal pages */}
+                  <Route path="/privacy" element={<PrivacyPolicy />} />
+                  <Route path="/terms" element={<TermsOfService />} />
+                  <Route path="/cookies" element={<CookiePolicy />} />
+                  <Route path="/refund" element={<RefundPolicy />} />
+                  <Route path="/shipping" element={<ShippingPolicy />} />
+                  <Route path="/contact" element={<Contact />} />
 
-              {/* Protected routes */}
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/projects" element={<ProtectedRoute><AllProjects /></ProtectedRoute>} />
-              <Route path="/project/:sessionId" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
-              <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
-              <Route path="/editor/:id" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
-              <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
-              <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
-              <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-              <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
-              <Route path="/auth/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
+                  {/* Protected routes */}
+                  <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                  <Route path="/projects" element={<ProtectedRoute><AllProjects /></ProtectedRoute>} />
+                  <Route path="/project/:sessionId" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
+                  <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
+                  <Route path="/editor/:id" element={<ProtectedRoute><Editor /></ProtectedRoute>} />
+                  <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+                  <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+                  <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                  <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
+                  <Route path="/auth/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
 
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </ThemeProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

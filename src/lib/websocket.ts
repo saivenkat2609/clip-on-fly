@@ -260,15 +260,26 @@ export function createVideoWebSocket(
   onMessage: (data: WebSocketMessage) => void,
   onError?: (error: Event) => void
 ): VideoStatusWebSocket {
-  const wsUrl = import.meta.env.VITE_WEBSOCKET_URL || 'wss://your-websocket-id.execute-api.us-east-1.amazonaws.com/prod';
+  // Use proxy in development, direct URL in production
+  let wsUrl: string;
+  if (import.meta.env.MODE === 'development') {
+    // Use Vite proxy in development (hides backend URL)
+    // Construct WebSocket URL from current location
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsUrl = `${protocol}//${window.location.host}/ws`;
+  } else {
+    // Use direct URL in production
+    wsUrl = import.meta.env.VITE_WEBSOCKET_URL || 'wss://your-websocket-id.execute-api.us-east-1.amazonaws.com/prod';
+  }
 
   if (DEBUG) console.log('[createVideoWebSocket] Initializing WebSocket:', {
     url: wsUrl,
-    isDefault: !import.meta.env.VITE_WEBSOCKET_URL,
+    mode: import.meta.env.MODE,
+    isDefault: !import.meta.env.VITE_WEBSOCKET_URL && import.meta.env.MODE !== 'development',
     envVarSet: !!import.meta.env.VITE_WEBSOCKET_URL
   });
 
-  if (!import.meta.env.VITE_WEBSOCKET_URL) {
+  if (!import.meta.env.VITE_WEBSOCKET_URL && import.meta.env.MODE !== 'development') {
     console.warn('[createVideoWebSocket] ⚠️ VITE_WEBSOCKET_URL not set! Using default URL. WebSocket may not work!');
   }
 

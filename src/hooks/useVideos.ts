@@ -296,10 +296,15 @@ export function useVideos(options?: {
     ? !hasReceivedRealtimeData && !videoQuery.data?.length
     : videoQuery.isLoading;
 
+  // Explicitly expose error and isError for better error handling
   return {
-    ...videoQuery,
     data: filteredVideos,
-    isLoading, // Override with custom loading state for real-time mode
+    isLoading: videoQuery.isLoading,
+    error: videoQuery.error,  // Expose error object
+    isError: videoQuery.isError,  // Expose error boolean
+    refetch: videoQuery.refetch,
+    isFetching: videoQuery.isFetching,
+    isSuccess: videoQuery.isSuccess,
   };
 }
 

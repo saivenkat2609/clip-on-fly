@@ -5,23 +5,25 @@
  * import { pageVariants, containerVariants, itemVariants } from '@/lib/animations';
  */
 
+import type { Variants } from "framer-motion";
+
 // Page transition animations
-export const pageVariants = {
+export const pageVariants: Variants = {
   initial: { opacity: 0, y: 20 },
   animate: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.3, ease: "easeOut" }
+    transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] }
   },
   exit: {
     opacity: 0,
     y: -20,
-    transition: { duration: 0.2, ease: "easeIn" }
+    transition: { duration: 0.2, ease: [0.4, 0, 1, 1] }
   }
 };
 
 // Stagger container for lists and grids
-export const containerVariants = {
+export const containerVariants: Variants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -33,14 +35,14 @@ export const containerVariants = {
 };
 
 // Stagger items (children of containerVariants)
-export const itemVariants = {
+export const itemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   show: {
     opacity: 1,
     y: 0,
     transition: {
       duration: 0.3,
-      ease: "easeOut"
+      ease: [0.4, 0, 0.2, 1]
     }
   }
 };
@@ -79,7 +81,7 @@ export const counterVariants = {
 };
 
 // Fade in animation
-export const fadeInVariants = {
+export const fadeInVariants: Variants = {
   initial: { opacity: 0 },
   animate: {
     opacity: 1,
@@ -92,14 +94,14 @@ export const fadeInVariants = {
 };
 
 // Slide up animation
-export const slideUpVariants = {
+export const slideUpVariants: Variants = {
   initial: { opacity: 0, y: 30 },
   animate: {
     opacity: 1,
     y: 0,
     transition: {
       duration: 0.4,
-      ease: "easeOut"
+      ease: [0.4, 0, 0.2, 1]
     }
   },
   exit: {
@@ -107,20 +109,20 @@ export const slideUpVariants = {
     y: -30,
     transition: {
       duration: 0.3,
-      ease: "easeIn"
+      ease: [0.4, 0, 1, 1]
     }
   }
 };
 
 // Scale animation for modals
-export const scaleVariants = {
+export const scaleVariants: Variants = {
   initial: { opacity: 0, scale: 0.95 },
   animate: {
     opacity: 1,
     scale: 1,
     transition: {
       duration: 0.2,
-      ease: "easeOut"
+      ease: [0.4, 0, 0.2, 1]
     }
   },
   exit: {
@@ -128,7 +130,7 @@ export const scaleVariants = {
     scale: 0.95,
     transition: {
       duration: 0.15,
-      ease: "easeIn"
+      ease: [0.4, 0, 1, 1]
     }
   }
 };
@@ -142,7 +144,7 @@ export const shakeVariants = {
 };
 
 // Bounce animation for success
-export const bounceVariants = {
+export const bounceVariants: Variants = {
   initial: { scale: 0 },
   animate: {
     scale: 1,
@@ -161,26 +163,26 @@ export const progressVariants = {
     width: `${progress}%`,
     transition: {
       duration: 0.3,
-      ease: "easeOut"
+      ease: [0.4, 0, 0.2, 1]
     }
   })
 };
 
 // Skeleton loading animation
-export const skeletonVariants = {
+export const skeletonVariants: Variants = {
   initial: { opacity: 0.5 },
   animate: {
     opacity: [0.5, 0.8, 0.5],
     transition: {
       duration: 1.5,
       repeat: Infinity,
-      ease: "easeInOut"
+      ease: [0.4, 0, 0.6, 1]
     }
   }
 };
 
 // Notification slide in from right
-export const notificationVariants = {
+export const notificationVariants: Variants = {
   initial: { opacity: 0, x: 100 },
   animate: {
     opacity: 1,
@@ -196,7 +198,7 @@ export const notificationVariants = {
     x: 100,
     transition: {
       duration: 0.2,
-      ease: "easeIn"
+      ease: [0.4, 0, 1, 1]
     }
   }
 };
