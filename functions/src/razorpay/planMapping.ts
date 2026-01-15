@@ -24,21 +24,21 @@ export const PLAN_MAPPING: Record<
 > = {
   Starter: {
     monthly: {
-      INR: "plan_RybpDLG1KKnDCb", // ✓ Replace with your Razorpay plan ID
+      INR: "plan_S4CtRyWbOZQgnS", // ✓ Replace with your Razorpay plan ID
       USD: "plan_starter_monthly_usd", // Not used - INR only
     },
     yearly: {
-      INR: "plan_Ryyy1wcBFDFslo", // TODO: Replace with actual Razorpay plan ID
+      INR: "plan_S4Cv9jTDCHhTKD", // TODO: Replace with actual Razorpay plan ID
       USD: "plan_starter_yearly_usd", // Not used - INR only
     },
   },
   Professional: {
     monthly: {
-      INR: "plan_RyywJzNVLpu8Ya", // TODO: Replace with actual Razorpay plan ID
+      INR: "plan_S4CvkbtnVsToU5", // TODO: Replace with actual Razorpay plan ID
       USD: "plan_professional_monthly_usd", // Not used - INR only
     },
     yearly: {
-      INR: "plan_Ryyv7DUZW9iMRx", // TODO: Replace with actual Razorpay plan ID
+      INR: "plan_S4CwJVUeaywAsP", // TODO: Replace with actual Razorpay plan ID
       USD: "plan_professional_yearly_usd", // Not used - INR only
     },
   },
