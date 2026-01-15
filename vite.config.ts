@@ -11,21 +11,21 @@ export default defineConfig(({ mode }) => ({
     // Proxy configuration to hide backend URLs in development
     proxy: {
       '/api': {
-        target: process.env.VITE_API_ENDPOINT || 'https://g78mc4ok92.execute-api.us-east-1.amazonaws.com',
+        target: process.env.VITE_API_ENDPOINT,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
         secure: false,
         ws: false
       },
       '/ws': {
-        target: process.env.VITE_WEBSOCKET_URL || 'wss://dye394x0nd.execute-api.us-east-1.amazonaws.com/prod',
+        target: process.env.VITE_WEBSOCKET_URL,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ws/, ''),
         secure: false,
         ws: true  // Enable WebSocket proxying
       },
       '/upload-proxy': {
-        target: process.env.VITE_WORKER_UPLOAD_URL || 'https://r2-upload-proxy.gvijay4004.workers.dev',
+        target: process.env.VITE_WORKER_UPLOAD_URL,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/upload-proxy/, ''),
         secure: false

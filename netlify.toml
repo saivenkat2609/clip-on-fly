@@ -6,17 +6,17 @@
   NODE_VERSION = "18"
   SECRETS_SCAN_OMIT_PATHS = "dist/**,functions/**,.env.example"
 
-# API Proxy - hides backend URLs in production
+# API Proxy - uses environment variable
 [[redirects]]
   from = "/api/*"
-  to = "https://g78mc4ok92.execute-api.us-east-1.amazonaws.com/:splat"
+  to = "{{VITE_API_ENDPOINT}}/:splat"
   status = 200
   force = true
 
-# Upload Proxy - hides R2 worker URL
+# Upload Proxy - uses environment variable
 [[redirects]]
   from = "/upload-proxy/*"
-  to = "https://r2-upload-proxy.gvijay4004.workers.dev/:splat"
+  to = "{{VITE_WORKER_UPLOAD_URL}}/:splat"
   status = 200
   force = true
 
