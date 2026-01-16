@@ -452,12 +452,12 @@ export default function Login() {
       if (shouldRedirectToBilling === 'true') {
         toast({
           title: 'Account created successfully!',
-          description: 'Welcome to NebulaAI! Redirecting you to billing...',
+          description: 'Welcome to Clip on Fly! Redirecting you to billing...',
         });
       } else {
         toast({
           title: 'Account created successfully!',
-          description: 'Welcome to NebulaAI! A verification email has been sent to your inbox.',
+          description: 'Welcome to Clip on Fly! A verification email has been sent to your inbox.',
         });
       }
       // Navigation handled by auto-redirect useEffect
@@ -625,7 +625,7 @@ export default function Login() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">NebulaAI</span>
+            <span className="text-xl font-bold text-foreground">Clip on Fly</span>
           </Link>
         </div>
       </nav>

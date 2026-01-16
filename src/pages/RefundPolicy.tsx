@@ -14,7 +14,7 @@ export default function RefundPolicy() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">NebulaAI</span>
+            <span className="text-xl font-bold">Clip on Fly</span>
           </Link>
         </div>
       </nav>
@@ -99,7 +99,7 @@ export default function RefundPolicy() {
                 To request a refund:
               </p>
               <ol className="list-decimal list-inside space-y-2 text-muted-foreground ml-4">
-                <li>Contact our support team at nebulaai.help@gmail.com</li>
+                <li>Contact our support team at cliponfly.help@gmail.com</li>
                 <li>Include your account email and transaction ID</li>
                 <li>Provide a brief explanation of your refund request</li>
                 <li>Allow 3-5 business days for review</li>
@@ -194,8 +194,8 @@ export default function RefundPolicy() {
                 For questions about refunds or cancellations, please contact us at:
               </p>
               <p className="text-muted-foreground">
-                Email: nebulaai.help@gmail.com<br />
-                Address: NebulaAI Billing Department
+                Email: cliponfly.help@gmail.com<br />
+                Address: Clip on Fly Billing Department
               </p>
               <p className="text-sm text-muted-foreground mt-3 italic">
                 Support via email only (responses within 24–48 hours)

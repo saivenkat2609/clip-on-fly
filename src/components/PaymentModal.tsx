@@ -76,7 +76,7 @@ export function PaymentModal({
       await openRazorpayCheckout({
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         subscription_id: subscriptionData.subscriptionId,
-        name: 'NebulaAI',
+        name: 'Clip on Fly',
         description: `${planName} Plan - ${billingPeriod}`,
         handler: async (response) => {
           // Step 4: Verify payment on backend

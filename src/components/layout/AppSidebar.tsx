@@ -102,7 +102,7 @@ export function AppSidebar() {
           </div>
           {!isCollapsed && (
             <span className="text-lg font-bold text-sidebar-foreground bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent">
-              NebulaAI
+              Clip on Fly
             </span>
           )}
         </div>

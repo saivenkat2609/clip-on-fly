@@ -54,7 +54,7 @@ export default function Contact() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">NebulaAI</span>
+            <span className="text-xl font-bold">Clip on Fly</span>
           </Link>
         </div>
       </nav>
@@ -156,20 +156,20 @@ export default function Contact() {
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-sm font-semibold mb-1">General Inquiries</p>
-                  <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">
-                    nebulaai.help@gmail.com
+                  <a href="mailto:cliponfly.help@gmail.com" className="text-primary hover:underline">
+                    cliponfly.help@gmail.com
                   </a>
                 </div>
                 <div>
                   <p className="text-sm font-semibold mb-1">Billing & Payments</p>
-                  <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">
-                    nebulaai.help@gmail.com
+                  <a href="mailto:cliponfly.help@gmail.com" className="text-primary hover:underline">
+                    cliponfly.help@gmail.com
                   </a>
                 </div>
                 <div>
                   <p className="text-sm font-semibold mb-1">Privacy & Legal</p>
-                  <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">
-                    nebulaai.help@gmail.com
+                  <a href="mailto:cliponfly.help@gmail.com" className="text-primary hover:underline">
+                    cliponfly.help@gmail.com
                   </a>
                 </div>
               </CardContent>
@@ -198,8 +198,8 @@ export default function Contact() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Support Email:</span>
-                    <a href="mailto:nebulaai.help@gmail.com" className="text-sm font-semibold text-primary hover:underline">
-                      nebulaai.help@gmail.com
+                    <a href="mailto:cliponfly.help@gmail.com" className="text-sm font-semibold text-primary hover:underline">
+                      cliponfly.help@gmail.com
                     </a>
                   </div>
                 </div>
