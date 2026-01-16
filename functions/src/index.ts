@@ -510,28 +510,59 @@ export const createRazorpaySubscription = functions
         );
         const razorpaySub = await razorpayClient.fetchSubscription(existingSubData.razorpaySubscriptionId);
 
-        // Update Firestore with actual Razorpay status
+        // Handle different subscription statuses
         if (razorpaySub.status === 'cancelled' || razorpaySub.status === 'completed' || razorpaySub.status === 'expired') {
+          // Subscription ended - update Firestore and allow new subscription
           await existingSubDoc.ref.update({
             status: razorpaySub.status,
             cancelledAt: razorpaySub.ended_at ? admin.firestore.Timestamp.fromMillis(razorpaySub.ended_at * 1000) : admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
           console.log(`Updated subscription ${existingSubData.razorpaySubscriptionId} status to ${razorpaySub.status}`);
-        } else {
-          // Still active in Razorpay, block duplicate
+        } else if (razorpaySub.status === 'created') {
+          // Payment not completed - check if subscription is stale (> 30 minutes old)
+          const createdAt = existingSubData.createdAt?.toMillis() || 0;
+          const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+
+          if (createdAt < thirtyMinutesAgo) {
+            // Stale 'created' subscription - cancel it and allow new one
+            try {
+              await razorpayClient.cancelSubscription(existingSubData.razorpaySubscriptionId, false);
+              await existingSubDoc.ref.update({
+                status: 'cancelled',
+                cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              });
+              console.log(`Auto-cancelled stale subscription ${existingSubData.razorpaySubscriptionId}`);
+            } catch (cancelError) {
+              console.error('Failed to cancel stale subscription:', cancelError);
+              // Continue anyway - allow new subscription
+            }
+          } else {
+            // Recent 'created' subscription - return existing subscription ID to retry payment
+            console.log(`Reusing recent subscription ${existingSubData.razorpaySubscriptionId} for retry`);
+            return {
+              subscriptionId: razorpaySub.id,
+              planId: razorpaySub.plan_id,
+              status: razorpaySub.status,
+              shortUrl: razorpaySub.short_url,
+            };
+          }
+        } else if (razorpaySub.status === 'active' || razorpaySub.status === 'authenticated') {
+          // Actually active subscription - block duplicate
           throw new functions.https.HttpsError(
             'already-exists',
             `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
           );
         }
       } catch (error: any) {
-        // If Razorpay fetch fails, assume subscription is still active and block
+        // If error is HttpsError, rethrow it
+        if (error.code === 'already-exists') {
+          throw error;
+        }
+        // For other errors (network, Razorpay API), log but allow new subscription attempt
         console.error('Failed to verify subscription status from Razorpay:', error);
-        throw new functions.https.HttpsError(
-          'already-exists',
-          `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
-        );
+        // Don't block - allow user to try creating new subscription
       }
     }
 
