@@ -45,6 +45,9 @@ export function PaymentModal({
       return;
     }
 
+    // Prevent double-clicks
+    if (isProcessing) return;
+
     setIsProcessing(true);
 
     try {

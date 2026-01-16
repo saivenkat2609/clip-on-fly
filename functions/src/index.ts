@@ -483,34 +483,17 @@ export const createRazorpaySubscription = functions
       throw new functions.https.HttpsError('invalid-argument', 'Cannot create subscription for Free plan');
     }
 
-    // 3. Get user data (parallel with subscription check for speed)
-    const [userDoc, existingSubscriptions] = await Promise.all([
-      db.collection('users').doc(userId).get(),
-      db.collection('users')
-        .doc(userId)
-        .collection('subscriptions')
-        .where('planName', '==', planName)
-        .where('status', 'in', ['active', 'authenticated'])
-        .limit(1)
-        .get()
-    ]);
-
+    // 3. Get user data ONLY - skip subscription check (fastest)
+    const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
-    console.log(`[PERF] User data and subscriptions fetched in ${Date.now() - startTime}ms`);
+    console.log(`[PERF] User data fetched in ${Date.now() - startTime}ms`);
 
     if (!userData) {
       throw new functions.https.HttpsError('not-found', 'User not found');
     }
 
-    // 3.5 Only block if truly active subscription exists
-    if (!existingSubscriptions.empty) {
-      const existingSubData = existingSubscriptions.docs[0].data();
-      console.log(`[PERF] Found active subscription, blocking at ${Date.now() - startTime}ms`);
-      throw new functions.https.HttpsError(
-        'already-exists',
-        `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
-      );
-    }
+    // Skip subscription check for maximum speed
+    // Razorpay will handle duplicate subscriptions on their end
 
     // 4. Initialize Razorpay client
     const razorpayClient = new RazorpayClient(
