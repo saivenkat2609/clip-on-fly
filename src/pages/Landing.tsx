@@ -155,7 +155,7 @@ export default function Landing() {
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
                 <Sparkles className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold">NebulaAI</span>
+              <span className="text-xl font-bold">Clip on Fly</span>
             </div>
 
             {/* Navigation Links - Hidden on mobile */}
@@ -611,7 +611,7 @@ export default function Landing() {
                 We've Got Answers
               </span>
             </h2>
-            <p className="text-xl text-muted-foreground">Everything you need to know about NebulaAI</p>
+            <p className="text-xl text-muted-foreground">Everything you need to know about Clip on Fly</p>
           </div>
           <div className="max-w-3xl mx-auto">
             <Card className="shadow-lg border-2">
@@ -665,7 +665,7 @@ export default function Landing() {
 
                 {/* Description */}
                 <p className="text-xl md:text-2xl text-white/90 mb-10 max-w-3xl mx-auto leading-relaxed">
-                  Join thousands of creators who are already making viral content with NebulaAI
+                  Join thousands of creators who are already making viral content with Clip on Fly
                 </p>
 
                 {/* CTA Buttons */}

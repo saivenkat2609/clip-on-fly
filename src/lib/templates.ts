@@ -1,4 +1,4 @@
-// Template System for NebulaAI
+// Template System for Clip on Fly
 // This file contains all template definitions and styling properties
 
 export interface TemplateStyle {

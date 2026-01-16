@@ -41,7 +41,7 @@ function TermsOfServiceContent() {
       <section>
         <h3 className="font-semibold text-base mb-2">1. Acceptance of Terms</h3>
         <p className="text-muted-foreground">
-          By accessing and using NebulaAI ("the Service"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.
+          By accessing and using Clip on Fly ("the Service"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.
         </p>
       </section>
 
@@ -110,7 +110,7 @@ function TermsOfServiceContent() {
       <section>
         <h3 className="font-semibold text-base mb-2">8. Limitations</h3>
         <p className="text-muted-foreground">
-          In no event shall NebulaAI or its suppliers be liable for any damages (including, without limitation, damages for loss of data or profit, or due to business interruption) arising out of the use or inability to use the Service.
+          In no event shall Clip on Fly or its suppliers be liable for any damages (including, without limitation, damages for loss of data or profit, or due to business interruption) arising out of the use or inability to use the Service.
         </p>
       </section>
 
@@ -131,7 +131,7 @@ function TermsOfServiceContent() {
       <section>
         <h3 className="font-semibold text-base mb-2">11. Contact Us</h3>
         <p className="text-muted-foreground">
-          If you have any questions about these Terms, please contact us at nebulaai.help@gmail.com
+          If you have any questions about these Terms, please contact us at cliponfly.help@gmail.com
         </p>
       </section>
 
@@ -183,7 +183,7 @@ function PrivacyPolicyContent() {
         <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-4">
           <li>With service providers who perform services on our behalf</li>
           <li>To comply with legal obligations or respond to legal requests</li>
-          <li>To protect the rights, property, or safety of NebulaAI, our users, or others</li>
+          <li>To protect the rights, property, or safety of Clip on Fly, our users, or others</li>
           <li>In connection with a merger, acquisition, or sale of assets (with notice to you)</li>
           <li>With your consent or at your direction</li>
         </ul>
@@ -256,7 +256,7 @@ function PrivacyPolicyContent() {
       <section>
         <h3 className="font-semibold text-base mb-2">12. Contact Us</h3>
         <p className="text-muted-foreground">
-          If you have any questions about this Privacy Policy, please contact us at nebulaai.help@gmail.com
+          If you have any questions about this Privacy Policy, please contact us at cliponfly.help@gmail.com
         </p>
       </section>
 

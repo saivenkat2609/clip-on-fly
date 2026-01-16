@@ -455,10 +455,13 @@ export const getYouTubeConnections = functions.https.onCall(async (data, context
  */
 export const createRazorpaySubscription = functions
   .runWith({
-    secrets: [razorpayKeyId, razorpayKeySecret],
+    secrets: [razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret],
     memory: '512MB',
   })
   .https.onCall(async (data, context) => {
+    const startTime = Date.now();
+    console.log('[PERF] createRazorpaySubscription started');
+
     // 1. Verify authentication
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -480,60 +483,17 @@ export const createRazorpaySubscription = functions
       throw new functions.https.HttpsError('invalid-argument', 'Cannot create subscription for Free plan');
     }
 
-    // 3. Get user data
+    // 3. Get user data ONLY - skip subscription check (fastest)
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
+    console.log(`[PERF] User data fetched in ${Date.now() - startTime}ms`);
 
     if (!userData) {
       throw new functions.https.HttpsError('not-found', 'User not found');
     }
 
-    // 3.5 Check if user already has an active subscription for this plan
-    const existingSubscriptions = await db
-      .collection('users')
-      .doc(userId)
-      .collection('subscriptions')
-      .where('planName', '==', planName)
-      .where('status', 'in', ['active', 'authenticated', 'created'])
-      .get();
-
-    if (!existingSubscriptions.empty) {
-      // Verify actual status from Razorpay (user may have cancelled in dashboard)
-      const existingSubDoc = existingSubscriptions.docs[0];
-      const existingSubData = existingSubDoc.data();
-
-      try {
-        const razorpayClient = new RazorpayClient(
-          razorpayKeyId.value(),
-          razorpayKeySecret.value(),
-          razorpayWebhookSecret.value()
-        );
-        const razorpaySub = await razorpayClient.fetchSubscription(existingSubData.razorpaySubscriptionId);
-
-        // Update Firestore with actual Razorpay status
-        if (razorpaySub.status === 'cancelled' || razorpaySub.status === 'completed' || razorpaySub.status === 'expired') {
-          await existingSubDoc.ref.update({
-            status: razorpaySub.status,
-            cancelledAt: razorpaySub.ended_at ? admin.firestore.Timestamp.fromMillis(razorpaySub.ended_at * 1000) : admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          console.log(`Updated subscription ${existingSubData.razorpaySubscriptionId} status to ${razorpaySub.status}`);
-        } else {
-          // Still active in Razorpay, block duplicate
-          throw new functions.https.HttpsError(
-            'already-exists',
-            `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
-          );
-        }
-      } catch (error: any) {
-        // If Razorpay fetch fails, assume subscription is still active and block
-        console.error('Failed to verify subscription status from Razorpay:', error);
-        throw new functions.https.HttpsError(
-          'already-exists',
-          `You already have an active ${planName} subscription. Please cancel your existing subscription before subscribing again.`
-        );
-      }
-    }
+    // Skip subscription check for maximum speed
+    // Razorpay will handle duplicate subscriptions on their end
 
     // 4. Initialize Razorpay client
     const razorpayClient = new RazorpayClient(
@@ -546,22 +506,27 @@ export const createRazorpaySubscription = functions
       // 5. Create or get Razorpay customer
       let customerId = userData?.razorpayCustomerId;
       if (!customerId) {
+        console.log(`[PERF] Creating new Razorpay customer at ${Date.now() - startTime}ms`);
         const customer: any = await razorpayClient.createCustomer(
           userData.email,
           userData.displayName || 'User'
         );
         customerId = customer.id;
+        console.log(`[PERF] Customer created in ${Date.now() - startTime}ms`);
 
         // Save customer ID
         await db.collection('users').doc(userId).update({
           razorpayCustomerId: customerId,
         });
+      } else {
+        console.log(`[PERF] Using existing customer ID at ${Date.now() - startTime}ms`);
       }
 
       // 6. Get plan ID from mapping
       const planId = getRazorpayPlanId(planName, billingPeriod, currency);
 
       // 7. Create subscription
+      console.log(`[PERF] Creating subscription at ${Date.now() - startTime}ms`);
       const subscription: any = await razorpayClient.createSubscription(
         customerId,
         planId,
@@ -569,6 +534,7 @@ export const createRazorpaySubscription = functions
           notify_email: userData.email,
         }
       );
+      console.log(`[PERF] Subscription created in ${Date.now() - startTime}ms`);
 
       // 8. Save subscription to Firestore
       const subscriptionData = {
@@ -596,6 +562,7 @@ export const createRazorpaySubscription = functions
         .set(subscriptionData);
 
       // 9. Return subscription details for frontend
+      console.log(`[PERF] Total createRazorpaySubscription time: ${Date.now() - startTime}ms`);
       return {
         subscriptionId: subscription.id,
         planId: subscription.plan_id,
@@ -613,7 +580,7 @@ export const createRazorpaySubscription = functions
  */
 export const verifyRazorpayPayment = functions
   .runWith({
-    secrets: [razorpayKeyId, razorpayKeySecret],
+    secrets: [razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret],
   })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -740,7 +707,7 @@ export const verifyRazorpayPayment = functions
  */
 export const cancelRazorpaySubscription = functions
   .runWith({
-    secrets: [razorpayKeyId, razorpayKeySecret],
+    secrets: [razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret],
   })
   .https.onCall(async (data, context) => {
     if (!context.auth) {

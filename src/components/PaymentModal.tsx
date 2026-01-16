@@ -45,13 +45,18 @@ export function PaymentModal({
       return;
     }
 
+    // Prevent double-clicks
+    if (isProcessing) return;
+
     setIsProcessing(true);
 
     try {
       // Step 1: Create subscription in backend
-      toast({
-        title: 'Creating subscription...',
-        description: 'Please wait while we prepare your payment.',
+      // Show immediate feedback for better UX
+      const toastId = toast({
+        title: 'Preparing payment...',
+        description: 'Opening payment gateway',
+        duration: 30000, // Keep visible
       });
 
       const subscriptionData = await createSubscription.mutateAsync({
@@ -64,14 +69,14 @@ export function PaymentModal({
       // This prevents modal stacking and focus issues
       onClose();
 
-      // Small delay to ensure modal closes completely
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Minimal delay - just enough for modal animation
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Step 3: Open Razorpay checkout (modal is now closed)
       await openRazorpayCheckout({
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         subscription_id: subscriptionData.subscriptionId,
-        name: 'NebulaAI',
+        name: 'Clip on Fly',
         description: `${planName} Plan - ${billingPeriod}`,
         handler: async (response) => {
           // Step 4: Verify payment on backend

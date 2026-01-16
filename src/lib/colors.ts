@@ -1,5 +1,5 @@
 /**
- * Standardized Color Palette for NebulaAI
+ * Standardized Color Palette for Clip on Fly
  *
  * This file defines consistent color classes used throughout the application.
  * All colors use CSS variables that adapt to the selected theme.

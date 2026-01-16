@@ -52,7 +52,7 @@ export function Footer() {
                 </svg>
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                NebulaAI
+                Clip on Fly
               </span>
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
@@ -139,7 +139,7 @@ export function Footer() {
         <div className="pt-8 border-t border-border/40">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-muted-foreground text-center md:text-left">
-              © {currentYear} NebulaAI. All rights reserved.
+              © {currentYear} Clip on Fly. All rights reserved.
             </p>
             <p className="text-sm text-muted-foreground flex items-center gap-1">
               Made with <Heart className="h-3.5 w-3.5 text-red-500 fill-red-500" /> for content creators

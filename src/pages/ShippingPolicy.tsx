@@ -13,7 +13,7 @@ export default function ShippingPolicy() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">NebulaAI</span>
+            <span className="text-xl font-bold">Clip on Fly</span>
           </Link>
         </div>
       </nav>
@@ -34,7 +34,7 @@ export default function ShippingPolicy() {
             <section>
               <h2 className="text-xl font-semibold mb-3">1. Digital Service Delivery</h2>
               <p className="text-muted-foreground leading-relaxed">
-                NebulaAI is a cloud-based SaaS (Software as a Service) platform that provides instant digital access to
+                Clip on Fly is a cloud-based SaaS (Software as a Service) platform that provides instant digital access to
                 video processing services. There are no physical products or traditional shipping involved. All services
                 are delivered electronically via our web platform.
               </p>
@@ -94,7 +94,7 @@ export default function ShippingPolicy() {
             <section>
               <h2 className="text-xl font-semibold mb-3">6. Geographic Restrictions</h2>
               <p className="text-muted-foreground leading-relaxed">
-                NebulaAI is accessible globally from any location with internet access. There are no geographic
+                Clip on Fly is accessible globally from any location with internet access. There are no geographic
                 shipping restrictions since all services are delivered digitally. However, payment processing
                 availability may vary by country based on our payment provider's supported regions.
               </p>
@@ -155,14 +155,14 @@ export default function ShippingPolicy() {
               <h2 className="text-xl font-semibold mb-3">11. Contact Support</h2>
               <p className="text-muted-foreground leading-relaxed">
                 If you experience any issues with service delivery, access, or downloads, please contact our support
-                team at <a href="mailto:nebulaai.help@gmail.com" className="text-primary hover:underline">nebulaai.help@gmail.com</a>.
+                team at <a href="mailto:cliponfly.help@gmail.com" className="text-primary hover:underline">cliponfly.help@gmail.com</a>.
                 We typically respond within 24 hours during business days and provide 24/7 emergency support for critical issues.
               </p>
             </section>
 
             <div className="mt-8 p-4 bg-muted/50 rounded-lg">
               <p className="text-sm text-muted-foreground">
-                <strong>Note:</strong> This policy applies to digital service delivery only. NebulaAI does not sell,
+                <strong>Note:</strong> This policy applies to digital service delivery only. Clip on Fly does not sell,
                 ship, or deliver any physical products. All features, services, and content are provided electronically
                 through our cloud-based platform.
               </p>

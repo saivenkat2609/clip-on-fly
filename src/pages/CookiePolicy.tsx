@@ -14,7 +14,7 @@ export default function CookiePolicy() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">NebulaAI</span>
+            <span className="text-xl font-bold">Clip on Fly</span>
           </Link>
         </div>
       </nav>
@@ -171,8 +171,8 @@ export default function CookiePolicy() {
                 If you have questions about our use of cookies, please contact us at:
               </p>
               <p className="text-muted-foreground mt-2">
-                Email: nebulaai.help@gmail.com<br />
-                Address: NebulaAI Privacy Team
+                Email: cliponfly.help@gmail.com<br />
+                Address: Clip on Fly Privacy Team
               </p>
             </section>
           </CardContent>
