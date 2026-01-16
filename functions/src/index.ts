@@ -455,7 +455,7 @@ export const getYouTubeConnections = functions.https.onCall(async (data, context
  */
 export const createRazorpaySubscription = functions
   .runWith({
-    secrets: [razorpayKeyId, razorpayKeySecret],
+    secrets: [razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret],
     memory: '512MB',
   })
   .https.onCall(async (data, context) => {
@@ -613,7 +613,7 @@ export const createRazorpaySubscription = functions
  */
 export const verifyRazorpayPayment = functions
   .runWith({
-    secrets: [razorpayKeyId, razorpayKeySecret],
+    secrets: [razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret],
   })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -740,7 +740,7 @@ export const verifyRazorpayPayment = functions
  */
 export const cancelRazorpaySubscription = functions
   .runWith({
-    secrets: [razorpayKeyId, razorpayKeySecret],
+    secrets: [razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret],
   })
   .https.onCall(async (data, context) => {
     if (!context.auth) {
