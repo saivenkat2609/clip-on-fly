@@ -459,6 +459,9 @@ export const createRazorpaySubscription = functions
     memory: '512MB',
   })
   .https.onCall(async (data, context) => {
+    const startTime = Date.now();
+    console.log('[PERF] createRazorpaySubscription started');
+
     // 1. Verify authentication
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
@@ -483,6 +486,7 @@ export const createRazorpaySubscription = functions
     // 3. Get user data
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
+    console.log(`[PERF] User data fetched in ${Date.now() - startTime}ms`);
 
     if (!userData) {
       throw new functions.https.HttpsError('not-found', 'User not found');
@@ -496,6 +500,7 @@ export const createRazorpaySubscription = functions
       .where('planName', '==', planName)
       .where('status', 'in', ['active', 'authenticated', 'created'])
       .get();
+    console.log(`[PERF] Existing subscriptions checked in ${Date.now() - startTime}ms`);
 
     if (!existingSubscriptions.empty) {
       const existingSubDoc = existingSubscriptions.docs[0];
@@ -511,25 +516,25 @@ export const createRazorpaySubscription = functions
       // For 'created' status, trust Firestore and handle based on age
       if (firestoreStatus === 'created') {
         if (isStale) {
-          // Stale 'created' subscription - cancel it WITHOUT fetching from Razorpay (saves 2-5 seconds!)
-          console.log(`Skipping stale subscription ${existingSubData.razorpaySubscriptionId} - allowing new subscription`);
-          try {
-            const razorpayClient = new RazorpayClient(
-              razorpayKeyId.value(),
-              razorpayKeySecret.value(),
-              razorpayWebhookSecret.value()
-            );
-            await razorpayClient.cancelSubscription(existingSubData.razorpaySubscriptionId, false);
-            await existingSubDoc.ref.update({
-              status: 'cancelled',
-              cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            console.log(`Auto-cancelled stale subscription ${existingSubData.razorpaySubscriptionId}`);
-          } catch (cancelError) {
-            console.error('Failed to cancel stale subscription:', cancelError);
-            // Continue anyway - allow new subscription
-          }
+          // Stale 'created' subscription - mark as cancelled in Firestore immediately
+          console.log(`[PERF] Skipping stale subscription ${existingSubData.razorpaySubscriptionId} at ${Date.now() - startTime}ms`);
+          await existingSubDoc.ref.update({
+            status: 'cancelled',
+            cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`[PERF] Marked stale subscription as cancelled at ${Date.now() - startTime}ms`);
+
+          // Cancel in Razorpay asynchronously (don't await - saves 2 seconds!)
+          // This cleans up abandoned subscriptions without blocking the user
+          const razorpayClient = new RazorpayClient(
+            razorpayKeyId.value(),
+            razorpayKeySecret.value(),
+            razorpayWebhookSecret.value()
+          );
+          razorpayClient.cancelSubscription(existingSubData.razorpaySubscriptionId, false)
+            .then(() => console.log(`Async: Cancelled stale subscription ${existingSubData.razorpaySubscriptionId} in Razorpay`))
+            .catch(err => console.error(`Async: Failed to cancel stale subscription:`, err));
         } else {
           // Recent 'created' subscription - reuse it for retry (no need to fetch from Razorpay!)
           console.log(`Reusing recent subscription ${existingSubData.razorpaySubscriptionId} for retry`);
@@ -589,22 +594,27 @@ export const createRazorpaySubscription = functions
       // 5. Create or get Razorpay customer
       let customerId = userData?.razorpayCustomerId;
       if (!customerId) {
+        console.log(`[PERF] Creating new Razorpay customer at ${Date.now() - startTime}ms`);
         const customer: any = await razorpayClient.createCustomer(
           userData.email,
           userData.displayName || 'User'
         );
         customerId = customer.id;
+        console.log(`[PERF] Customer created in ${Date.now() - startTime}ms`);
 
         // Save customer ID
         await db.collection('users').doc(userId).update({
           razorpayCustomerId: customerId,
         });
+      } else {
+        console.log(`[PERF] Using existing customer ID at ${Date.now() - startTime}ms`);
       }
 
       // 6. Get plan ID from mapping
       const planId = getRazorpayPlanId(planName, billingPeriod, currency);
 
       // 7. Create subscription
+      console.log(`[PERF] Creating subscription at ${Date.now() - startTime}ms`);
       const subscription: any = await razorpayClient.createSubscription(
         customerId,
         planId,
@@ -612,6 +622,7 @@ export const createRazorpaySubscription = functions
           notify_email: userData.email,
         }
       );
+      console.log(`[PERF] Subscription created in ${Date.now() - startTime}ms`);
 
       // 8. Save subscription to Firestore
       const subscriptionData = {
@@ -639,6 +650,7 @@ export const createRazorpaySubscription = functions
         .set(subscriptionData);
 
       // 9. Return subscription details for frontend
+      console.log(`[PERF] Total createRazorpaySubscription time: ${Date.now() - startTime}ms`);
       return {
         subscriptionId: subscription.id,
         planId: subscription.plan_id,
