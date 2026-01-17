@@ -477,6 +477,110 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Data Privacy & YouTube Integration Section */}
+      <section className="py-20 bg-gradient-to-b from-muted/30 to-background">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-12">
+              <span className="inline-block px-4 py-2 rounded-full bg-green-500/10 text-green-600 text-sm font-semibold mb-4 border border-green-500/20">
+                YOUR DATA, YOUR CONTROL
+              </span>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                YouTube Integration & Data Privacy
+              </h2>
+              <p className="text-lg text-muted-foreground">
+                Complete transparency about what we access and why
+              </p>
+            </div>
+
+            <Card className="shadow-xl border-2 border-primary/10">
+              <CardContent className="p-8 space-y-6">
+                {/* What We Do */}
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                      <Check className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg mb-2">What We Access</h3>
+                      <p className="text-muted-foreground leading-relaxed">
+                        When you connect your YouTube account, we request permission to upload videos to your channel.
+                        We access your basic channel information (name, profile picture) to display in your dashboard.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Why We Need It */}
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                      <Video className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg mb-2">Why We Need It</h3>
+                      <p className="text-muted-foreground leading-relaxed">
+                        To enable you to publish your edited clips directly to YouTube with one click. This eliminates
+                        the need to download and manually upload each clip, saving you time.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* What We DON'T Do */}
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center flex-shrink-0 mt-1">
+                      <Check className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg mb-2">What We DON'T Do</h3>
+                      <ul className="space-y-2 text-muted-foreground">
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
+                          <span>We never access or modify your existing YouTube videos</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
+                          <span>We never upload content without your explicit permission</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
+                          <span>We never share your data with third parties for advertising</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
+                          <span>We never store copies of videos you upload to YouTube</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revoke Access */}
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    <strong className="text-foreground">You're in control:</strong> Disconnect your YouTube account
+                    anytime from your settings, or revoke access directly in your{' '}
+                    <a
+                      href="https://myaccount.google.com/permissions"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      Google Account Permissions
+                    </a>.{' '}
+                    <Link to="/privacy" className="text-primary hover:underline">
+                      Read our full Privacy Policy
+                    </Link>.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
       {/* Features Grid */}
       <section id="features" className="py-20 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-background via-primary/5 to-background" />
