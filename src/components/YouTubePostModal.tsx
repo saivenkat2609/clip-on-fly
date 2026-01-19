@@ -162,16 +162,37 @@ export function YouTubePostModal({
       setUploadProgress('');
 
       let errorMessage = 'Failed to upload to YouTube';
+      let shouldReconnect = false;
+
       if (error.message.includes('quota')) {
         errorMessage = 'YouTube API quota exceeded. Please try again tomorrow.';
       } else if (error.message.includes('not-found')) {
         errorMessage = 'Please connect your YouTube account first';
         setHasConnection(false);
+        shouldReconnect = true;
+      } else if (error.message.includes('reconnect your YouTube account') ||
+                 error.message.includes('connection has expired') ||
+                 error.message.includes('Failed to decrypt token')) {
+        errorMessage = 'Your YouTube connection has expired. Please reconnect your YouTube account in Settings.';
+        setHasConnection(false);
+        shouldReconnect = true;
+      } else if (error.message.includes('Malformed UTF-8')) {
+        errorMessage = 'Invalid characters detected. Please remove emojis and special characters from your title, description, or tags.';
       } else if (error.message) {
         errorMessage = error.message;
       }
 
-      toast.error(errorMessage);
+      toast.error(errorMessage, {
+        duration: shouldReconnect ? 8000 : 5000,
+        action: shouldReconnect ? {
+          label: 'Go to Settings',
+          onClick: () => {
+            onOpenChange(false);
+            window.location.href = '/settings';
+          }
+        } : undefined
+      });
+
       setUploading(false);
     }
   };

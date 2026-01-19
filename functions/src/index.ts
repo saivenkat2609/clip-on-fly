@@ -35,8 +35,24 @@ function encryptToken(token: string, key: string): string {
 }
 
 function decryptToken(encryptedToken: string, key: string): string {
-  const bytes = CryptoJS.AES.decrypt(encryptedToken, key);
-  return bytes.toString(CryptoJS.enc.Utf8);
+  try {
+    const bytes = CryptoJS.AES.decrypt(encryptedToken, key);
+    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+
+    // Verify decryption succeeded (empty string means decryption failed)
+    if (!decrypted || decrypted.length === 0) {
+      throw new Error('Decryption failed - token is empty or key is incorrect');
+    }
+
+    return decrypted;
+  } catch (error: any) {
+    console.error('Token decryption error:', {
+      error: error.message,
+      encryptedTokenLength: encryptedToken?.length,
+      keyLength: key?.length,
+    });
+    throw new Error('Failed to decrypt token. Please reconnect your YouTube account.');
+  }
 }
 
 // Get OAuth2 client
@@ -361,17 +377,42 @@ export const uploadToYouTube = functions
       const connectionDoc = connectionsSnapshot.docs[0];
       const connectionData = connectionDoc.data();
 
-      // Check if token is expired
-      let accessToken = decryptToken(connectionData.accessToken, encryptionKey.value());
+      // Check if token is expired and decrypt
+      let accessToken: string;
+      try {
+        accessToken = decryptToken(connectionData.accessToken, encryptionKey.value());
+      } catch (decryptError: any) {
+        console.error('Failed to decrypt YouTube access token:', decryptError.message);
+
+        // Delete the corrupted connection
+        await connectionDoc.ref.delete();
+
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Your YouTube connection has expired or is corrupted. Please reconnect your YouTube account in Settings.'
+        );
+      }
 
       if (connectionData.expiresAt < Date.now()) {
         console.log('Token expired, refreshing...');
-        accessToken = await refreshYouTubeToken(
-          connectionDoc,
-          youtubeClientId.value(),
-          youtubeClientSecret.value(),
-          encryptionKey.value()
-        );
+        try {
+          accessToken = await refreshYouTubeToken(
+            connectionDoc,
+            youtubeClientId.value(),
+            youtubeClientSecret.value(),
+            encryptionKey.value()
+          );
+        } catch (refreshError: any) {
+          console.error('Failed to refresh YouTube token:', refreshError.message);
+
+          // Delete the corrupted connection
+          await connectionDoc.ref.delete();
+
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            'Failed to refresh your YouTube access. Please reconnect your YouTube account in Settings.'
+          );
+        }
       }
 
       // Set up OAuth client with access token
@@ -642,6 +683,75 @@ export const getYouTubeConnections = functions.https.onCall(async (data, context
 
   return { connections };
 });
+
+/**
+ * ADMIN: Clean corrupted YouTube connections
+ * Removes connections with tokens that cannot be decrypted
+ */
+export const cleanCorruptedYouTubeConnections = functions
+  .runWith({ secrets: [encryptionKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        'unauthenticated',
+        'User must be authenticated'
+      );
+    }
+
+    const userId = context.auth.uid;
+
+    // Check if user is admin
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+
+    if (!userData || userData.role !== 'admin') {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'Only admin users can access this function'
+      );
+    }
+
+    console.log('[cleanCorruptedYouTubeConnections] Starting cleanup...');
+
+    try {
+      const connectionsSnapshot = await db
+        .collection('user_social_connections')
+        .where('platform', '==', 'youtube')
+        .get();
+
+      let corrupted = 0;
+      let valid = 0;
+
+      for (const doc of connectionsSnapshot.docs) {
+        const data = doc.data();
+
+        try {
+          // Try to decrypt the token
+          decryptToken(data.accessToken, encryptionKey.value());
+          valid++;
+        } catch (error) {
+          // Token is corrupted, delete it
+          console.log(`Deleting corrupted connection for user ${data.userId}`);
+          await doc.ref.delete();
+          corrupted++;
+        }
+      }
+
+      console.log(`[cleanCorruptedYouTubeConnections] Cleanup complete: ${corrupted} corrupted, ${valid} valid`);
+
+      return {
+        success: true,
+        corrupted,
+        valid,
+        total: connectionsSnapshot.size,
+      };
+    } catch (error: any) {
+      throw new functions.https.HttpsError(
+        'internal',
+        `Cleanup failed: ${error.message}`
+      );
+    }
+  });
 
 // ============================================================================
 // RAZORPAY PAYMENT GATEWAY FUNCTIONS
