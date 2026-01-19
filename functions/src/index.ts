@@ -342,7 +342,7 @@ export const uploadToYouTube = functions
           snippet: {
             title: safeTruncate(title, 100), // YouTube max 100 chars (UTF-8 safe)
             description: safeTruncate(description, 5000), // YouTube max 5000 chars (UTF-8 safe)
-            tags: tags || [],
+            tags: (tags || []).map((tag: string) => safeTruncate(tag, 500)), // YouTube max 500 chars per tag (UTF-8 safe)
             categoryId: categoryId || '22', // Default: People & Blogs
             defaultLanguage: 'en',
             defaultAudioLanguage: 'en'

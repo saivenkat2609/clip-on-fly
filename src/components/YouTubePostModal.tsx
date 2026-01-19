@@ -82,12 +82,26 @@ export function YouTubePostModal({
     try {
       setUploadProgress('Uploading to YouTube...');
 
+      // Sanitize tags: remove emojis and special characters that could cause UTF-8 issues
+      const sanitizeTags = (tagString: string): string[] => {
+        return tagString
+          .split(',')
+          .map(t => t.trim())
+          .filter(t => t)
+          .map(tag => {
+            // Remove emojis and non-ASCII characters that could cause issues
+            // Keep only alphanumeric, spaces, hyphens, and underscores
+            return tag.replace(/[^\x00-\x7F\u00C0-\u017F]/g, '').trim();
+          })
+          .filter(t => t.length > 0);
+      };
+
       const uploadToYouTube = httpsCallable(functions, 'uploadToYouTube');
       const result = await uploadToYouTube({
         videoUrl,
         title: title.trim(),
         description: description.trim(),
-        tags: tags.split(',').map(t => t.trim()).filter(t => t),
+        tags: sanitizeTags(tags),
         privacy,
         categoryId: '22' // People & Blogs
       });
