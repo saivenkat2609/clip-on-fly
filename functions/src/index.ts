@@ -49,6 +49,29 @@ function getOAuth2Client(clientId: string, clientSecret: string, redirectUri?: s
 }
 
 /**
+ * Safely truncate a string to a maximum length without breaking UTF-8 characters.
+ * Regular substring() can split multi-byte UTF-8 characters (emojis, etc), causing "Malformed UTF-8 data" errors.
+ *
+ * @param str - String to truncate
+ * @param maxLength - Maximum length in characters (not bytes)
+ * @returns Safely truncated string
+ */
+function safeTruncate(str: string | undefined | null, maxLength: number): string {
+  if (!str) return '';
+
+  // Use Array.from() to properly handle multi-byte UTF-8 characters
+  // This counts actual characters, not bytes
+  const chars = Array.from(str);
+
+  if (chars.length <= maxLength) {
+    return str;
+  }
+
+  // Take only the first maxLength characters
+  return chars.slice(0, maxLength).join('');
+}
+
+/**
  * Step 1: Generate YouTube OAuth URL
  * Called from frontend when user clicks "Connect YouTube"
  */
@@ -317,8 +340,8 @@ export const uploadToYouTube = functions
         part: ['snippet', 'status'],
         requestBody: {
           snippet: {
-            title: title.substring(0, 100), // YouTube max 100 chars
-            description: description?.substring(0, 5000) || '', // YouTube max 5000 chars
+            title: safeTruncate(title, 100), // YouTube max 100 chars (UTF-8 safe)
+            description: safeTruncate(description, 5000), // YouTube max 5000 chars (UTF-8 safe)
             tags: tags || [],
             categoryId: categoryId || '22', // Default: People & Blogs
             defaultLanguage: 'en',
