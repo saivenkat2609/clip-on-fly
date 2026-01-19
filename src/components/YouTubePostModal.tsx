@@ -69,6 +69,37 @@ export function YouTubePostModal({
     }
   };
 
+  // Test metadata function for debugging
+  const handleTestMetadata = async () => {
+    console.log('Testing metadata...');
+
+    const sanitizeTags = (tagString: string): string[] => {
+      return tagString
+        .split(',')
+        .map(t => t.trim())
+        .filter(t => t)
+        .map(tag => {
+          return tag.replace(/[^\x00-\x7F\u00C0-\u017F]/g, '').trim();
+        })
+        .filter(t => t.length > 0);
+    };
+
+    try {
+      const testMetadata = httpsCallable(functions, 'testYouTubeMetadata');
+      const result = await testMetadata({
+        title: title.trim(),
+        description: description.trim(),
+        tags: sanitizeTags(tags),
+      });
+
+      console.log('Metadata test result:', result.data);
+      toast.success('Metadata validation passed! Check browser console for details.');
+    } catch (error: any) {
+      console.error('Metadata test failed:', error);
+      toast.error(`Metadata validation failed: ${error.message}`);
+    }
+  };
+
   const handleUpload = async () => {
     if (!title.trim()) {
       toast.error('Please enter a title');
@@ -310,32 +341,46 @@ export function YouTubePostModal({
             </Alert>
 
             {/* Buttons */}
-            <div className="flex gap-3 pt-2">
-              <Button
-                onClick={handleClose}
-                variant="outline"
-                disabled={uploading}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleUpload}
-                disabled={uploading || !title.trim()}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Youtube className="h-4 w-4 mr-2" />
-                    Upload to YouTube
-                  </>
-                )}
-              </Button>
+            <div className="flex flex-col gap-3 pt-2">
+              {/* Debug button (only show in development or if explicitly enabled) */}
+              {(import.meta.env.DEV || import.meta.env.VITE_DEBUG_MODE === 'true') && (
+                <Button
+                  onClick={handleTestMetadata}
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                >
+                  🔍 Test Metadata (Debug)
+                </Button>
+              )}
+
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleClose}
+                  variant="outline"
+                  disabled={uploading}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpload}
+                  disabled={uploading || !title.trim()}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Youtube className="h-4 w-4 mr-2" />
+                      Upload to YouTube
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         )}

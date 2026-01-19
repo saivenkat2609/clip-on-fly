@@ -72,6 +72,67 @@ function safeTruncate(str: string | undefined | null, maxLength: number): string
 }
 
 /**
+ * Sanitize string for YouTube API - remove any problematic characters
+ * YouTube API can be very strict about certain Unicode characters
+ */
+function sanitizeForYouTube(str: string | undefined | null): string {
+  if (!str) return '';
+
+  // Remove null bytes and other control characters that YouTube rejects
+  let sanitized = str.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+
+  // Remove any malformed UTF-8 sequences by encoding and decoding
+  try {
+    sanitized = Buffer.from(sanitized, 'utf8').toString('utf8');
+  } catch (e) {
+    console.error('UTF-8 encoding error:', e);
+    // Fall back to ASCII-only if UTF-8 fails
+    sanitized = sanitized.replace(/[^\x20-\x7E]/g, '');
+  }
+
+  return sanitized;
+}
+
+/**
+ * Validate and log YouTube metadata before upload
+ */
+function validateYouTubeMetadata(title: string, description: string, tags: string[]): void {
+  console.log('=== YouTube Metadata Validation ===');
+
+  // Title validation
+  console.log('Title:', {
+    length: title.length,
+    bytes: Buffer.byteLength(title, 'utf8'),
+    preview: title.substring(0, 50),
+    containsEmojis: /[\u{1F300}-\u{1F9FF}]/u.test(title),
+    containsNullBytes: /\x00/.test(title),
+  });
+
+  // Description validation
+  console.log('Description:', {
+    length: description.length,
+    bytes: Buffer.byteLength(description, 'utf8'),
+    preview: description.substring(0, 50),
+    containsEmojis: /[\u{1F300}-\u{1F9FF}]/u.test(description),
+    containsNullBytes: /\x00/.test(description),
+  });
+
+  // Tags validation
+  console.log('Tags:', {
+    count: tags.length,
+    tags: tags.map(tag => ({
+      value: tag,
+      length: tag.length,
+      bytes: Buffer.byteLength(tag, 'utf8'),
+      containsEmojis: /[\u{1F300}-\u{1F9FF}]/u.test(tag),
+      containsNullBytes: /\x00/.test(tag),
+    }))
+  });
+
+  console.log('=================================');
+}
+
+/**
  * Step 1: Generate YouTube OAuth URL
  * Called from frontend when user clicks "Connect YouTube"
  */
@@ -332,51 +393,101 @@ export const uploadToYouTube = functions
       const contentLength = videoResponse.headers['content-length'];
       console.log(`Video size: ${contentLength} bytes`);
 
+      // Sanitize and prepare metadata
+      console.log('Raw metadata received:', {
+        title,
+        description: description?.substring(0, 100),
+        tags,
+        privacy,
+      });
+
+      // Step 1: Sanitize for YouTube
+      const sanitizedTitle = sanitizeForYouTube(title);
+      const sanitizedDescription = sanitizeForYouTube(description);
+      const sanitizedTags = (tags || [])
+        .map((tag: string) => sanitizeForYouTube(tag))
+        .filter((tag: string) => tag.length > 0);
+
+      // Step 2: Truncate to YouTube limits
+      const finalTitle = safeTruncate(sanitizedTitle, 100);
+      const finalDescription = safeTruncate(sanitizedDescription, 5000);
+      const finalTags = sanitizedTags.map((tag: string) => safeTruncate(tag, 500));
+
+      // Step 3: Validate before upload
+      validateYouTubeMetadata(finalTitle, finalDescription, finalTags);
+
       // Upload to YouTube
       console.log('Uploading to YouTube...');
       const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
-      const uploadResponse = await youtube.videos.insert({
-        part: ['snippet', 'status'],
-        requestBody: {
-          snippet: {
-            title: safeTruncate(title, 100), // YouTube max 100 chars (UTF-8 safe)
-            description: safeTruncate(description, 5000), // YouTube max 5000 chars (UTF-8 safe)
-            tags: (tags || []).map((tag: string) => safeTruncate(tag, 500)), // YouTube max 500 chars per tag (UTF-8 safe)
-            categoryId: categoryId || '22', // Default: People & Blogs
-            defaultLanguage: 'en',
-            defaultAudioLanguage: 'en'
+      try {
+        const uploadResponse = await youtube.videos.insert({
+          part: ['snippet', 'status'],
+          requestBody: {
+            snippet: {
+              title: finalTitle,
+              description: finalDescription,
+              tags: finalTags,
+              categoryId: categoryId || '22', // Default: People & Blogs
+              defaultLanguage: 'en',
+              defaultAudioLanguage: 'en'
+            },
+            status: {
+              privacyStatus: privacy || 'public', // 'public', 'private', or 'unlisted'
+              selfDeclaredMadeForKids: false
+            }
           },
-          status: {
-            privacyStatus: privacy || 'public', // 'public', 'private', or 'unlisted'
-            selfDeclaredMadeForKids: false
+          media: {
+            body: videoResponse.data
           }
-        },
-        media: {
-          body: videoResponse.data
-        }
-      });
+        });
 
-      const videoId = uploadResponse.data.id;
-      const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const videoId = uploadResponse.data.id;
+        const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-      // Update last used timestamp
-      await connectionDoc.ref.update({
-        lastUsed: Date.now()
-      });
+        // Update last used timestamp
+        await connectionDoc.ref.update({
+          lastUsed: Date.now()
+        });
 
-      console.log(`Successfully uploaded to YouTube: ${youtubeUrl}`);
+        console.log(`Successfully uploaded to YouTube: ${youtubeUrl}`);
 
-      return {
-        success: true,
-        videoId,
-        url: youtubeUrl,
-        title: uploadResponse.data.snippet?.title,
-        channelTitle: uploadResponse.data.snippet?.channelTitle
-      };
+        return {
+          success: true,
+          videoId,
+          url: youtubeUrl,
+          title: uploadResponse.data.snippet?.title,
+          channelTitle: uploadResponse.data.snippet?.channelTitle
+        };
+
+      } catch (youtubeError: any) {
+        // Detailed YouTube API error logging
+        console.error('YouTube API Error Details:', {
+          message: youtubeError.message,
+          code: youtubeError.code,
+          statusCode: youtubeError.response?.status,
+          errors: youtubeError.response?.data?.error?.errors,
+          errorData: JSON.stringify(youtubeError.response?.data, null, 2),
+        });
+
+        // Re-throw with more context
+        throw youtubeError;
+      }
 
     } catch (error: any) {
       console.error('YouTube upload error:', error);
+
+      // Log complete error details for debugging
+      console.error('Complete error object:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        statusCode: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        errors: error.response?.data?.error?.errors,
+        stack: error.stack,
+      });
 
       // Handle specific errors
       if (error.code === 403) {
@@ -393,12 +504,76 @@ export const uploadToYouTube = functions
         );
       }
 
+      // Extract detailed error message from YouTube API response
+      let detailedError = error.message;
+      if (error.response?.data?.error?.errors) {
+        const youtubeErrors = error.response.data.error.errors;
+        detailedError = youtubeErrors.map((e: any) =>
+          `${e.domain}.${e.reason}: ${e.message}`
+        ).join('; ');
+      }
+
       throw new functions.https.HttpsError(
         'internal',
-        `Failed to upload to YouTube: ${error.message}`
+        `Failed to upload to YouTube: ${detailedError}`
       );
     }
   });
+
+/**
+ * DEBUG FUNCTION: Test YouTube metadata validation without uploading
+ * Call this to test if your metadata will cause issues
+ */
+export const testYouTubeMetadata = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'User must be authenticated'
+    );
+  }
+
+  const { title, description, tags } = data;
+
+  try {
+    console.log('Testing metadata...');
+
+    // Step 1: Sanitize
+    const sanitizedTitle = sanitizeForYouTube(title);
+    const sanitizedDescription = sanitizeForYouTube(description);
+    const sanitizedTags = (tags || [])
+      .map((tag: string) => sanitizeForYouTube(tag))
+      .filter((tag: string) => tag.length > 0);
+
+    // Step 2: Truncate
+    const finalTitle = safeTruncate(sanitizedTitle, 100);
+    const finalDescription = safeTruncate(sanitizedDescription, 5000);
+    const finalTags = sanitizedTags.map((tag: string) => safeTruncate(tag, 500));
+
+    // Step 3: Validate
+    validateYouTubeMetadata(finalTitle, finalDescription, finalTags);
+
+    return {
+      success: true,
+      original: { title, description, tags },
+      sanitized: {
+        title: finalTitle,
+        description: finalDescription,
+        tags: finalTags,
+      },
+      validation: {
+        titleOk: finalTitle.length > 0 && finalTitle.length <= 100,
+        descriptionOk: finalDescription.length <= 5000,
+        tagsOk: finalTags.every((tag: string) => tag.length <= 500),
+        hasNullBytes: /\x00/.test(finalTitle) || /\x00/.test(finalDescription) || finalTags.some((tag: string) => /\x00/.test(tag)),
+      }
+    };
+  } catch (error: any) {
+    throw new functions.https.HttpsError(
+      'internal',
+      `Validation error: ${error.message}`
+    );
+  }
+});
 
 /**
  * Step 5: Disconnect YouTube Account
