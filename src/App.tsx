@@ -70,13 +70,16 @@ const App = () => (
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/email-validator" element={<EmailValidator />} />
 
-                  {/* Legal pages */}
-                  <Route path="/privacy" element={<PrivacyPolicy />} />
-                  <Route path="/terms" element={<TermsOfService />} />
-                  <Route path="/cookies" element={<CookiePolicy />} />
-                  <Route path="/refund" element={<RefundPolicy />} />
-                  <Route path="/shipping" element={<ShippingPolicy />} />
-                  <Route path="/contact" element={<Contact />} />
+              {/* Legal pages - with aliases for Google verification */}
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
+              <Route path="/cookies" element={<CookiePolicy />} />
+              <Route path="/cookie-policy" element={<CookiePolicy />} />
+              <Route path="/refund" element={<RefundPolicy />} />
+              <Route path="/shipping" element={<ShippingPolicy />} />
+              <Route path="/contact" element={<Contact />} />
 
                   {/* Protected routes */}
                   <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
