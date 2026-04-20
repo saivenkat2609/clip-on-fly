@@ -1,0 +1,17 @@
+name = "reframe-ai-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+SUPABASE_URL = "https://scucjprcerfcamllmdqo.supabase.co"
+
+# Secrets — set these via: wrangler secret put SECRET_NAME
+# SUPABASE_SERVICE_ROLE_KEY
+# YOUTUBE_CLIENT_ID
+# YOUTUBE_CLIENT_SECRET
+# ENCRYPTION_KEY
+# RAZORPAY_KEY_ID
+# RAZORPAY_KEY_SECRET
+# RAZORPAY_WEBHOOK_SECRET
+
