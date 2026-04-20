@@ -36,18 +36,12 @@ export async function handleCreateSubscription(request: Request, env: Env): Prom
     const planId = getRazorpayPlanId(planName, billingPeriod, currency);
     const subscription = await razorpay.createSubscription(customerId, planId, userData.email);
 
-    // Save subscription to Supabase — replaces Firestore subcollection set
+    // Save subscription to Supabase
     await supabase.from('subscriptions').insert({
-      id: subscription.id,
       user_id: userId,
-      razorpay_subscription_id: subscription.id,
-      razorpay_plan_id: planId,
-      razorpay_customer_id: customerId,
-      plan_name: planName,
-      billing_period: billingPeriod,
-      currency,
-      amount: subscription.plan?.item?.amount || 0,
+      plan: planName,
       status: subscription.status,
+      razorpay_subscription_id: subscription.id,
     });
 
     return jsonResponse({ subscriptionId: subscription.id, status: subscription.status });
