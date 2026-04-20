@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => ({
         manualChunks: {
           // Vendor chunks - separate large dependencies
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/functions'],
+          'supabase': ['@supabase/supabase-js'],
           'ui-vendor': ['framer-motion', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select'],
           'query': ['@tanstack/react-query'],
           // Heavy editor dependencies - only loaded when needed
