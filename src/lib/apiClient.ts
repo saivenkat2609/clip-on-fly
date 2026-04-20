@@ -8,7 +8,7 @@
  * - Max 3 attempts
  */
 
-import { auth } from './firebase';
+import { supabase } from './supabase';
 
 interface CacheEntry<T> {
   data: T;
@@ -76,13 +76,12 @@ class APIClient {
    * as defense-in-depth to prove the request came from our JavaScript app
    */
   private async getAuthHeaders(): Promise<Record<string, string>> {
-    const user = auth.currentUser;
-    if (!user) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       throw new Error('Not authenticated');
     }
 
-    // Get fresh Firebase ID token (auto-refreshes if expired)
-    const idToken = await user.getIdToken();
+    const idToken = session.access_token;
 
     return {
       'Authorization': `Bearer ${idToken}`,

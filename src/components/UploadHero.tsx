@@ -10,8 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, Link as LinkIcon, Sparkles, Type, Crop, Loader2, FileVideo, X, Palette, CheckCircle2, Clock, Smartphone, Monitor, Youtube, Layers, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { apiClient } from "@/lib/apiClient";
 import { TemplateSelectionModal } from "@/components/TemplateSelectionModal";
 import { templates, Template } from "@/lib/templates";
@@ -178,20 +177,13 @@ export function UploadHero() {
 
       const sessionId = data.session_id;
 
-      // Create video document in Firestore with real video metadata
-      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await setDoc(videoDocRef, {
-        sessionId: sessionId,
-        youtubeUrl: videoUrl,
-        projectName: projectName,
-        status: "processing",
-        createdAt: serverTimestamp(),
-        videoInfo: {
-          title: metadata.title,
-          thumbnail: metadata.thumbnail,
-          author: metadata.author,
-        },
-        // Processing settings
+      await supabase.from('videos').insert({
+        user_id: currentUser.uid,
+        session_id: sessionId,
+        youtube_url: videoUrl,
+        project_name: projectName,
+        status: 'processing',
+        video_info: { title: metadata.title, thumbnail: metadata.thumbnail, author: metadata.author },
         settings: {
           templateId: selectedTemplateId,
           aspectRatio: selectedResolution,
@@ -199,14 +191,11 @@ export function UploadHero() {
           numClips: parseInt(selectedNumClips),
         },
         clips: [],
-        error: null
+        error: null,
       });
 
-      // Increment user's totalVideos count
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        totalVideos: increment(1)
-      });
+      const { data: ud } = await supabase.from('users').select('total_videos').eq('id', currentUser.uid).single();
+      await supabase.from('users').update({ total_videos: (ud?.total_videos ?? 0) + 1 }).eq('id', currentUser.uid);
 
       toast({
         title: "Processing started!",
@@ -418,38 +407,32 @@ export function UploadHero() {
 
       console.log(`[Upload] Processing started:`, processData);
 
-      // Step 3: Create video document in Firestore
-      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, session_id);
-      await setDoc(videoDocRef, {
-        sessionId: session_id,
-        youtubeUrl: "",
-        projectName: selectedFile.name.replace(/\.[^/.]+$/, ""),
-        status: "processing",
-        createdAt: serverTimestamp(),
-        videoInfo: {
-          title: selectedFile.name.replace(/\.[^/.]+$/, ""),
+      await supabase.from('videos').insert({
+        user_id: currentUser.uid,
+        session_id: session_id,
+        youtube_url: '',
+        project_name: selectedFile.name.replace(/\.[^/.]+$/, ''),
+        status: 'processing',
+        video_info: {
+          title: selectedFile.name.replace(/\.[^/.]+$/, ''),
           duration: 0,
-          description: "Uploaded from dashboard",
-          thumbnail: "",
+          description: 'Uploaded from dashboard',
+          thumbnail: '',
         },
-        // Processing settings
         settings: {
           templateId: selectedTemplateId,
           aspectRatio: selectedResolution,
           timeframe: selectedTimeframe,
           numClips: parseInt(selectedNumClips),
         },
-        s3VideoKey: s3_key,
-        uploadedFile: true,
+        s3_video_key: s3_key,
+        uploaded_file: true,
         clips: [],
-        error: null
+        error: null,
       });
 
-      // Increment user's totalVideos count
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        totalVideos: increment(1)
-      });
+      const { data: ud2 } = await supabase.from('users').select('total_videos').eq('id', currentUser.uid).single();
+      await supabase.from('users').update({ total_videos: (ud2?.total_videos ?? 0) + 1 }).eq('id', currentUser.uid);
 
       toast({
         title: "Upload Successful!",

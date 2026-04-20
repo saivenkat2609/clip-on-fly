@@ -4,8 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect, useState, useMemo } from "react";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { app } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useUserProfileRealtime } from "@/hooks/useUserProfile";
 import { useNavigate } from "react-router-dom";
 import { Users, Crown, AlertCircle, Search, Filter } from "lucide-react";
@@ -68,12 +67,14 @@ export default function AdminUsers() {
 
         console.log('[AdminUsers] Fetching users via Cloud Function...');
 
-        const functions = getFunctions(app);
-        const getAllUsersFunction = httpsCallable(functions, 'getAllUsers');
-
-        console.log('[AdminUsers] Calling getAllUsers function...');
-        const result = await getAllUsersFunction();
-        const data = result.data as { success: boolean; users: UserData[] };
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${import.meta.env.VITE_WORKERS_API_URL}/admin/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json() as { success: boolean; users: UserData[] };
 
         console.log('[AdminUsers] Fetched', data.users.length, 'users');
         console.log('[AdminUsers] Successfully loaded users:', data.users);

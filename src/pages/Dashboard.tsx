@@ -11,8 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Play, Calendar, Loader2, AlertCircle, Bell, AlertTriangle, RefreshCw } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useVideos } from "@/hooks/useVideos";
 import { useUserPlanRealtime, useUserProfileRealtime } from "@/hooks/useUserProfile";
 import { useVideoStatus } from "@/hooks/useWebSocket";
@@ -221,25 +220,17 @@ export default function Dashboard() {
   useEffect(() => {
     if (!currentUser || !isAdmin) return;
 
-    const notificationsRef = collection(db, `users/${currentUser.uid}/notifications`);
-    const notifQuery = query(notificationsRef, orderBy('createdAt', 'desc'));
+    supabase.from('notifications').select('*')
+      .eq('user_id', currentUser.uid).order('created_at', { ascending: false })
+      .then(({ data }) => setNotifications((data ?? []) as any[]));
 
-    const unsubscribeNotifications = onSnapshot(
-      notifQuery,
-      (snapshot) => {
-        const notificationsData: Notification[] = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Notification));
+    const channel = supabase.channel(`notifications_${currentUser.uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${currentUser.uid}` }, () => {
+        supabase.from('notifications').select('*').eq('user_id', currentUser.uid).order('created_at', { ascending: false })
+          .then(({ data }) => setNotifications((data ?? []) as any[]));
+      }).subscribe();
 
-        setNotifications(notificationsData);
-      },
-      (err) => {
-        console.error("Error fetching notifications:", err);
-      }
-    );
-
-    return () => unsubscribeNotifications();
+    return () => { supabase.removeChannel(channel); };
   }, [currentUser, isAdmin]);
 
   // Use shared hook for credits calculation

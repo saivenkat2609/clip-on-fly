@@ -21,8 +21,7 @@ import { exportToJSON } from '@/lib/videoEditor/utils';
 import { ExportSettings } from '@/lib/videoEditor/types';
 import { apiClient } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface ExportModalProps {
@@ -171,14 +170,30 @@ export function ExportModal({
       const separator = freshUrl.includes('?') ? '&' : '?';
       freshUrl = `${freshUrl}${separator}_v=${cacheBuster}&_r=${randomId}`;
 
-      // Update Firestore with editor state and new video URL
-      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await updateDoc(videoRef, {
-        [`clips.${clipIndex}.downloadUrl`]: freshUrl,
-        [`clips.${clipIndex}.editorState`]: exportData,
-        [`clips.${clipIndex}.edited`]: true,
-        [`clips.${clipIndex}.lastModified`]: new Date().toISOString(),
-      });
+      // Fetch current clips, update the specific one, write back
+      const { data: videoData, error: fetchError } = await supabase
+        .from('videos')
+        .select('clips')
+        .eq('id', sessionId)
+        .eq('user_id', currentUser.uid)
+        .single();
+      if (fetchError) throw fetchError;
+
+      const updatedClips = [...(videoData.clips || [])];
+      updatedClips[clipIndex] = {
+        ...updatedClips[clipIndex],
+        downloadUrl: freshUrl,
+        editorState: exportData,
+        edited: true,
+        lastModified: new Date().toISOString(),
+      };
+
+      const { error: updateError } = await supabase
+        .from('videos')
+        .update({ clips: updatedClips })
+        .eq('id', sessionId)
+        .eq('user_id', currentUser.uid);
+      if (updateError) throw updateError;
 
       setExportedVideoUrl(freshUrl);
       setExportSuccess(true);

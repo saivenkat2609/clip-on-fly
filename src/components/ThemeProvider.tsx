@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 
 type Theme = "indigo" | "ocean" | "sunset" | "forest" | "cyber" | "rose";
@@ -74,13 +73,12 @@ export function ThemeProvider({
     async function syncWithFirestore() {
       if (currentUser) {
         try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
+          const { data: userData } = await supabase
+            .from('users').select('theme, mode').eq('id', currentUser.uid).maybeSingle();
 
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
+          if (userData) {
             const firestoreTheme = userData.theme as Theme || defaultTheme;
-            const firestoreMode = userData.mode as Mode || defaultMode;
+            const firestoreMode = (userData as any).mode as Mode || defaultMode;
 
             // Only update if different from cache
             const cachedTheme = localStorage.getItem(`theme_${currentUser.uid}`);
@@ -146,9 +144,7 @@ export function ThemeProvider({
 
         // Sync to Firestore
         try {
-          await updateDoc(doc(db, 'users', currentUser.uid), {
-            theme: newTheme
-          });
+          await supabase.from('users').update({ theme: newTheme }).eq('id', currentUser.uid);
         } catch (error) {
           console.error('Failed to sync theme to Firestore:', error);
         }
@@ -163,9 +159,7 @@ export function ThemeProvider({
 
         // Sync to Firestore
         try {
-          await updateDoc(doc(db, 'users', currentUser.uid), {
-            mode: newMode
-          });
+          await supabase.from('users').update({ mode: newMode }).eq('id', currentUser.uid);
         } catch (error) {
           console.error('Failed to sync mode to Firestore:', error);
         }

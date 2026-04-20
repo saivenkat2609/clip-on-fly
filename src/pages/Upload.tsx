@@ -10,8 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Upload as UploadIcon, FileVideo, AlertCircle, Loader2, Sparkles, Type, Crop, X, CheckCircle2, Palette, Clock, Layers, Smartphone, Monitor, Youtube } from "lucide-react";
 import { validateVideo, formatDuration, formatFileSize, VideoValidationResult } from "@/lib/videoValidator";
-import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { apiClient } from "@/lib/apiClient";
 import { useRemainingCredits } from "@/hooks/useRemainingCredits";
 import { UsageWarningBanner } from "@/components/UsageWarningBanner";
@@ -183,18 +182,13 @@ export default function Upload() {
 
       const sessionId = data.session_id;
 
-      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await setDoc(videoDocRef, {
-        sessionId: sessionId,
-        youtubeUrl: videoUrl,
-        projectName: projectName,
-        status: "processing",
-        createdAt: serverTimestamp(),
-        videoInfo: {
-          title: metadata.title,
-          thumbnail: metadata.thumbnail,
-          author: metadata.author,
-        },
+      await supabase.from('videos').insert({
+        user_id: currentUser.uid,
+        session_id: sessionId,
+        youtube_url: videoUrl,
+        project_name: projectName,
+        status: 'processing',
+        video_info: { title: metadata.title, thumbnail: metadata.thumbnail, author: metadata.author },
         settings: {
           templateId: selectedTemplateId,
           aspectRatio: selectedResolution,
@@ -202,13 +196,11 @@ export default function Upload() {
           numClips: parseInt(selectedNumClips),
         },
         clips: [],
-        error: null
+        error: null,
       });
 
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        totalVideos: increment(1)
-      });
+      const { data: ud } = await supabase.from('users').select('total_videos').eq('id', currentUser.uid).single();
+      await supabase.from('users').update({ total_videos: (ud?.total_videos ?? 0) + 1 }).eq('id', currentUser.uid);
 
       toast({
         title: "Processing started!",

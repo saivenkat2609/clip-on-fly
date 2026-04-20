@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState, useEffect } from 'react';
 
 export interface UserProfile {
   uid: string;
@@ -12,20 +10,14 @@ export interface UserProfile {
   emailVerified: boolean;
   provider: string;
   providers: string[];
-
-  // Plan & Subscription
   plan: 'Free' | 'Starter' | 'Professional';
   subscriptionStatus?: 'none' | 'active' | 'authenticated' | 'cancelled' | 'expired' | 'paused' | 'halted';
   subscriptionId?: string;
   razorpayCustomerId?: string;
   preferredCurrency?: 'INR' | 'USD';
-
-  // Credits & Usage
   totalCredits: number;
   creditsUsed?: number;
   creditsExpiryDate: any;
-
-  // Plan Features
   maxVideoLength?: number;
   exportQuality?: '720p' | '1080p' | '4K';
   hasWatermark?: boolean;
@@ -34,46 +26,57 @@ export interface UserProfile {
   hasSocialScheduler?: boolean;
   hasAITitleGeneration?: boolean;
   supportLevel?: 'community' | 'email' | 'priority';
-
-  // User Preferences
   theme: string;
   mode: string;
   company: string;
-
-  // Role
   role?: 'user' | 'admin';
-
-  // Statistics
   totalVideos: number;
   totalClips: number;
   storageUsed: number;
-
-  // Notifications
-  notifications: {
-    processing: boolean;
-    weekly: boolean;
-    marketing: boolean;
-  };
-
-  // Timestamps
+  notifications: { processing: boolean; weekly: boolean; marketing: boolean };
   createdAt: any;
   lastLogin: any;
 }
 
-const CACHE_KEY_PREFIX = 'user_profile_';
-const SESSION_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+// Map Supabase snake_case columns → camelCase UserProfile shape the app expects
+function mapRow(row: any): UserProfile {
+  return {
+    uid: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    photoURL: row.photo_url,
+    emailVerified: row.email_verified,
+    provider: row.provider,
+    providers: row.providers,
+    plan: row.plan,
+    subscriptionStatus: row.subscription_status,
+    subscriptionId: row.subscription_id,
+    razorpayCustomerId: row.razorpay_customer_id,
+    preferredCurrency: row.preferred_currency,
+    totalCredits: row.total_credits,
+    creditsUsed: row.credits_used,
+    creditsExpiryDate: row.credits_expiry_date,
+    maxVideoLength: row.max_video_length,
+    exportQuality: row.export_quality,
+    hasWatermark: row.has_watermark,
+    hasAIViralityScore: row.has_ai_virality_score,
+    hasCustomBranding: row.has_custom_branding,
+    theme: row.theme,
+    mode: row.mode,
+    company: row.company,
+    role: row.role,
+    totalVideos: row.total_videos,
+    totalClips: row.total_clips,
+    storageUsed: row.storage_used,
+    notifications: row.notifications,
+    createdAt: row.created_at,
+    lastLogin: row.last_login,
+  };
+}
 
-/**
- * Aggressive caching hook for user profile
- *
- * Strategy:
- * 1. Check sessionStorage first (instant)
- * 2. Check React Query cache (instant)
- * 3. Fetch from Firestore only if both miss (one time per session)
- * 4. Cache for entire session
- *
- * NO real-time listeners - profile data rarely changes
- */
+const CACHE_KEY_PREFIX = 'user_profile_';
+const SESSION_CACHE_TTL = 24 * 60 * 60 * 1000;
+
 export function useUserProfile() {
   const { currentUser } = useAuth();
   const userId = currentUser?.uid;
@@ -83,8 +86,6 @@ export function useUserProfile() {
     queryFn: async () => {
       if (!userId) return null;
 
-      // Try sessionStorage first (instant, no API call)
-      // Skip cache if we just came from a payment (URL has payment success indicator)
       const skipCache = window.location.search.includes('payment=success') ||
                         sessionStorage.getItem('payment_just_completed') === 'true';
 
@@ -93,53 +94,28 @@ export function useUserProfile() {
           const cached = sessionStorage.getItem(`${CACHE_KEY_PREFIX}${userId}`);
           if (cached) {
             const { data, timestamp } = JSON.parse(cached);
-            if (Date.now() - timestamp < SESSION_CACHE_TTL) {
-              return data as UserProfile;
-            }
+            if (Date.now() - timestamp < SESSION_CACHE_TTL) return data as UserProfile;
           }
         } catch (error) {
           console.error('Failed to read cached profile:', error);
         }
       }
 
-      // Clear payment flag after using it
-      if (skipCache) {
-        sessionStorage.removeItem('payment_just_completed');
-      }
+      if (skipCache) sessionStorage.removeItem('payment_just_completed');
 
-      // Only fetch from Firestore if cache miss
-      const userDocRef = doc(db, 'users', userId);
-      const userDocSnap = await getDoc(userDocRef);
+      // Supabase: one line replaces doc() + getDoc()
+      const { data: row, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-      if (!userDocSnap.exists()) {
-        return null;
-      }
+      if (error || !row) return null;
 
-      const data = userDocSnap.data() as UserProfile;
+      const data = mapRow(row);
 
-      // Convert Firestore Timestamps to ISO strings for caching
-      const cacheData = {
-        ...data,
-        creditsExpiryDate: data.creditsExpiryDate?.toDate?.()
-          ? data.creditsExpiryDate.toDate().toISOString()
-          : data.creditsExpiryDate,
-        createdAt: data.createdAt?.toDate?.()
-          ? data.createdAt.toDate().toISOString()
-          : data.createdAt,
-        lastLogin: data.lastLogin?.toDate?.()
-          ? data.lastLogin.toDate().toISOString()
-          : data.lastLogin,
-      };
-
-      // Cache in sessionStorage
       try {
-        sessionStorage.setItem(
-          `${CACHE_KEY_PREFIX}${userId}`,
-          JSON.stringify({
-            data: cacheData,
-            timestamp: Date.now()
-          })
-        );
+        sessionStorage.setItem(`${CACHE_KEY_PREFIX}${userId}`, JSON.stringify({ data, timestamp: Date.now() }));
       } catch (error) {
         console.error('Failed to cache user profile:', error);
       }
@@ -147,10 +123,8 @@ export function useUserProfile() {
       return data;
     },
     enabled: !!userId,
-    // HIGH PRIORITY FIX #18: Changed from Infinity to reasonable TTLs
-    // This allows profile changes (plan upgrades, subscription changes) to reflect automatically
-    staleTime: 5 * 60 * 1000, // 5 minutes - data considered fresh for 5 min, then refetches in background
-    gcTime: 10 * 60 * 1000, // 10 minutes - cached data retained for 10 min after becoming unused
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchOnReconnect: false,
@@ -160,62 +134,14 @@ export function useUserProfile() {
   return query;
 }
 
-/**
- * Real-time listener for user profile - USE THIS FOR CREDITS
- * Updates immediately when credits change in Firestore
- */
+// Delegates to React Query — same interface, no Realtime subscription needed
 export function useUserProfileRealtime() {
-  const { currentUser } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!currentUser?.uid) {
-      setProfile(null);
-      setIsLoading(false);
-      return;
-    }
-
-    console.log('[useUserProfileRealtime] Setting up real-time listener for user:', currentUser.uid);
-
-    const userDocRef = doc(db, 'users', currentUser.uid);
-
-    const unsubscribe = onSnapshot(
-      userDocRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data() as UserProfile;
-          console.log('[useUserProfileRealtime] Profile updated:', {
-            creditsUsed: data.creditsUsed,
-            totalCredits: data.totalCredits,
-          });
-          setProfile(data);
-        } else {
-          setProfile(null);
-        }
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error('[useUserProfileRealtime] Listener error:', error);
-        setIsLoading(false);
-      }
-    );
-
-    return () => {
-      console.log('[useUserProfileRealtime] Cleaning up listener');
-      unsubscribe();
-    };
-  }, [currentUser?.uid]);
-
-  return { data: profile, isLoading };
+  const { data, isLoading } = useUserProfile();
+  return { data: data ?? null, isLoading };
 }
 
-/**
- * Hook to get specific user plan data
- */
 export function useUserPlan() {
   const { data: profile, ...rest } = useUserProfile();
-
   return {
     ...rest,
     plan: profile?.plan || 'Free',
@@ -226,12 +152,8 @@ export function useUserPlan() {
   };
 }
 
-/**
- * Real-time hook for user plan data - UPDATES IMMEDIATELY
- */
 export function useUserPlanRealtime() {
   const { data: profile, isLoading } = useUserProfileRealtime();
-
   return {
     isLoading,
     plan: profile?.plan || 'Free',
@@ -242,37 +164,15 @@ export function useUserPlanRealtime() {
   };
 }
 
-/**
- * Hook to get user theme preferences
- */
 export function useUserTheme() {
   const { data: profile, ...rest } = useUserProfile();
-
-  return {
-    ...rest,
-    theme: profile?.theme || 'indigo',
-    mode: profile?.mode || 'light',
-  };
+  return { ...rest, theme: profile?.theme || 'indigo', mode: profile?.mode || 'light' };
 }
 
-/**
- * Clear user profile cache (call on logout)
- */
 export function clearUserProfileCache(userId: string) {
-  try {
-    sessionStorage.removeItem(`${CACHE_KEY_PREFIX}${userId}`);
-  } catch (error) {
-    console.error('Failed to clear profile cache:', error);
-  }
+  try { sessionStorage.removeItem(`${CACHE_KEY_PREFIX}${userId}`); } catch {}
 }
 
-/**
- * Force refresh profile from server (call after profile update)
- */
 export async function refreshUserProfile(userId: string) {
-  try {
-    sessionStorage.removeItem(`${CACHE_KEY_PREFIX}${userId}`);
-  } catch (error) {
-    console.error('Failed to clear profile cache:', error);
-  }
+  try { sessionStorage.removeItem(`${CACHE_KEY_PREFIX}${userId}`); } catch {}
 }

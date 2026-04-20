@@ -11,7 +11,7 @@ export function EmailVerificationBanner() {
 
   // UI/UX FIX #86: Poll verification status every 30 seconds
   useEffect(() => {
-    if (!currentUser || currentUser.emailVerified) return;
+    if (!currentUser || !!currentUser.email_confirmed_at) return;
 
     const pollInterval = setInterval(async () => {
       try {
@@ -25,12 +25,12 @@ export function EmailVerificationBanner() {
   }, [currentUser, refreshUser]);
 
   // Don't show banner if user is verified or signed in with Google
-  if (!currentUser || currentUser.emailVerified) {
+  if (!currentUser || !!currentUser.email_confirmed_at) {
     return null;
   }
 
   // Don't show for Google OAuth users (they're auto-verified)
-  if (currentUser.providerData.some(provider => provider.providerId === 'google.com')) {
+  if (currentUser.identities?.some(i => i.provider === 'google')) {
     return null;
   }
 
@@ -51,7 +51,7 @@ export function EmailVerificationBanner() {
     setLoading(true);
     try {
       await refreshUser();
-      if (currentUser.emailVerified) {
+      if (currentUser.email_confirmed_at) {
         window.location.reload();
       }
     } catch (error) {

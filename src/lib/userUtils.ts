@@ -1,4 +1,4 @@
-import { User } from 'firebase/auth';
+import type { User } from '@supabase/supabase-js';
 
 /**
  * Get user initials from display name or email

@@ -9,8 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Upload, Link as LinkIcon, Sparkles, Type, Crop, Loader2, FileVideo, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc, updateDoc, increment, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 
 const API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || "https://your-api-gateway-url.amazonaws.com/prod";
 const WORKER_UPLOAD_URL = import.meta.env.VITE_WORKER_UPLOAD_URL; // New: Cloudflare Worker URL
@@ -180,31 +179,26 @@ export function UploadHero() {
       const processData = await processResponse.json();
       console.log(`[Upload] Processing started:`, processData);
 
-      // Step 3: Create video document in Firestore
-      const videoDocRef = doc(db, `users/${currentUser.uid}/videos`, session_id);
-      await setDoc(videoDocRef, {
-        sessionId: session_id,
-        youtubeUrl: "",
-        projectName: selectedFile.name.replace(/\.[^/.]+$/, ""),
-        status: "processing",
-        createdAt: serverTimestamp(),
-        videoInfo: {
-          title: selectedFile.name.replace(/\.[^/.]+$/, ""),
+      await supabase.from('videos').insert({
+        user_id: currentUser.uid,
+        session_id: session_id,
+        youtube_url: '',
+        project_name: selectedFile.name.replace(/\.[^/.]+$/, ''),
+        status: 'processing',
+        video_info: {
+          title: selectedFile.name.replace(/\.[^/.]+$/, ''),
           duration: 0,
-          description: "Uploaded from dashboard",
-          thumbnail: "",
+          description: 'Uploaded from dashboard',
+          thumbnail: '',
         },
-        s3VideoKey: s3_key,
-        uploadedFile: true,
+        s3_video_key: s3_key,
+        uploaded_file: true,
         clips: [],
-        error: null
+        error: null,
       });
 
-      // Increment user's totalVideos count
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        totalVideos: increment(1)
-      });
+      const { data: ud } = await supabase.from('users').select('total_videos').eq('id', currentUser.uid).single();
+      await supabase.from('users').update({ total_videos: (ud?.total_videos ?? 0) + 1 }).eq('id', currentUser.uid);
 
       toast({
         title: "Upload Successful!",

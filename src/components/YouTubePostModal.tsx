@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,15 +50,14 @@ export function YouTubePostModal({
   const checkConnection = async () => {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, 'user_social_connections'),
-        where('userId', '==', currentUser!.uid),
-        where('platform', '==', 'youtube'),
-        where('isActive', '==', true)
-      );
-
-      const snapshot = await getDocs(q);
-      setHasConnection(!snapshot.empty);
+      const { data } = await supabase
+        .from('user_social_connections')
+        .select('id')
+        .eq('user_id', currentUser!.uid)
+        .eq('platform', 'youtube')
+        .eq('is_active', true)
+        .limit(1);
+      setHasConnection((data?.length ?? 0) > 0);
     } catch (error) {
       console.error('Error checking YouTube connection:', error);
       toast.error('Failed to check YouTube connection');
@@ -82,17 +79,19 @@ export function YouTubePostModal({
     try {
       setUploadProgress('Uploading to YouTube...');
 
-      const uploadToYouTube = httpsCallable(functions, 'uploadToYouTube');
-      const result = await uploadToYouTube({
-        videoUrl,
-        title: title.trim(),
-        description: description.trim(),
-        tags: tags.split(',').map(t => t.trim()).filter(t => t),
-        privacy,
-        categoryId: '22' // People & Blogs
+      // uploadToYouTube stays on Lambda — needs 9min timeout, beyond Workers limit
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_LAMBDA_API_URL}/uploadToYouTube`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          videoUrl, title: title.trim(), description: description.trim(),
+          tags: tags.split(',').map((t: string) => t.trim()).filter((t: string) => t),
+          privacy, categoryId: '22',
+        }),
       });
-
-      const data = result.data as any;
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
 
       if (data.success) {
         setUploadProgress('Upload successful!');

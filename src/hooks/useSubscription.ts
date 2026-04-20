@@ -1,14 +1,6 @@
-/**
- * Subscription Management Hooks
- * Uses TanStack React Query for server state management
- */
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { collection, query, where, getDocs, orderBy, limit, doc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
-import { db, functions } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { httpsCallable } from 'firebase/functions';
-import { getAuth } from 'firebase/auth';
 import type { PlanName, BillingPeriod, Currency } from '@/lib/pricing';
 
 export interface Subscription {
@@ -43,9 +35,43 @@ export interface Transaction {
   createdAt: any;
 }
 
-/**
- * Get active subscription for current user
- */
+const API_BASE = import.meta.env.VITE_WORKERS_API_URL;
+
+// Helper: call a Cloudflare Worker endpoint with Supabase auth token
+async function callFunction(path: string, body: object) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function mapSubscription(row: any): Subscription {
+  return {
+    id: row.id,
+    razorpaySubscriptionId: row.razorpay_subscription_id,
+    razorpayPlanId: row.razorpay_plan_id,
+    razorpayCustomerId: row.razorpay_customer_id,
+    userId: row.user_id,
+    planName: row.plan_name,
+    billingPeriod: row.billing_period,
+    currency: row.currency,
+    amount: row.amount,
+    status: row.status,
+    currentStart: row.current_start,
+    currentEnd: row.current_end,
+    cancelledAt: row.cancelled_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 export function useActiveSubscription() {
   const { currentUser } = useAuth();
 
@@ -54,23 +80,17 @@ export function useActiveSubscription() {
     queryFn: async () => {
       if (!currentUser) return null;
 
-      const subscriptionsRef = collection(db, `users/${currentUser.uid}/subscriptions`);
-      const q = query(
-        subscriptionsRef,
-        where('status', '==', 'active'),
-        orderBy('createdAt', 'desc'),
-        limit(1)
-      );
+      // Replaces: query(subscriptionsRef, where('status','==','active'), orderBy('createdAt','desc'), limit(1))
+      const { data: rows } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', currentUser.uid)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) return null;
-
-      const doc = snapshot.docs[0];
-      return {
-        id: doc.id,
-        ...doc.data(),
-      } as Subscription;
+      if (!rows?.length) return null;
+      return mapSubscription(rows[0]);
     },
     enabled: !!currentUser,
     staleTime: 5 * 60 * 1000,
@@ -78,32 +98,18 @@ export function useActiveSubscription() {
   });
 }
 
-/**
- * Create a new subscription mutation
- */
 export function useCreateSubscription() {
   return useMutation({
-    mutationFn: async (data: {
-      planName: PlanName;
-      billingPeriod: BillingPeriod;
-      currency: Currency;
-    }) => {
-      const createSub = httpsCallable(functions, 'createRazorpaySubscription');
-      const result = await createSub(data);
-      return result.data as {
+    mutationFn: async (data: { planName: PlanName; billingPeriod: BillingPeriod; currency: Currency }) => {
+      // Replaces: httpsCallable(functions, 'createRazorpaySubscription')
+      return callFunction('/payments/create', data) as Promise<{
         subscriptionId: string;
         razorpayCustomerId: string;
-      };
-    },
-    onError: (error) => {
-      console.error('Create subscription error:', error);
+      }>;
     },
   });
 }
 
-/**
- * Verify payment mutation
- */
 export function useVerifyPayment() {
   const queryClient = useQueryClient();
 
@@ -113,49 +119,30 @@ export function useVerifyPayment() {
       razorpaySubscriptionId: string;
       razorpaySignature: string;
     }) => {
-      const verifyPayment = httpsCallable(functions, 'verifyRazorpayPayment');
-      const result = await verifyPayment(data);
-      return result.data as { success: boolean };
+      return callFunction('/payments/verify', data) as Promise<{ success: boolean }>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activeSubscription'] });
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     },
-    onError: (error) => {
-      console.error('Verify payment error:', error);
-    },
   });
 }
 
-/**
- * Cancel subscription mutation
- */
 export function useCancelSubscription() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: {
-      subscriptionId: string;
-      cancelAtCycleEnd: boolean;
-    }) => {
-      const cancelSub = httpsCallable(functions, 'cancelRazorpaySubscription');
-      const result = await cancelSub(data);
-      return result.data as { success: boolean; message: string };
+    mutationFn: async (data: { subscriptionId: string; cancelAtCycleEnd: boolean }) => {
+      return callFunction('/payments/cancel', data) as Promise<{ success: boolean; message: string }>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activeSubscription'] });
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
     },
-    onError: (error) => {
-      console.error('Cancel subscription error:', error);
-    },
   });
 }
 
-/**
- * Get transactions for current user
- */
 export function useTransactions() {
   const { currentUser } = useAuth();
 
@@ -164,15 +151,26 @@ export function useTransactions() {
     queryFn: async () => {
       if (!currentUser) return [];
 
-      const transactionsRef = collection(db, `users/${currentUser.uid}/transactions`);
-      const q = query(transactionsRef, orderBy('createdAt', 'desc'), limit(50));
+      const { data: rows } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', currentUser.uid)
+        .order('created_at', { ascending: false })
+        .limit(50);
 
-      const snapshot = await getDocs(q);
-
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Transaction[];
+      return (rows ?? []).map((row): Transaction => ({
+        id: row.id,
+        razorpayPaymentId: row.razorpay_payment_id,
+        razorpaySubscriptionId: row.razorpay_subscription_id,
+        razorpayCustomerId: row.razorpay_customer_id,
+        razorpayInvoiceId: row.razorpay_invoice_id,
+        userId: row.user_id,
+        planName: row.plan_name,
+        amount: row.amount,
+        currency: row.currency,
+        status: row.status,
+        createdAt: row.created_at,
+      }));
     },
     enabled: !!currentUser,
     staleTime: 5 * 60 * 1000,
@@ -180,167 +178,91 @@ export function useTransactions() {
   });
 }
 
-/**
- * Fetch invoice PDF
- */
 export function useFetchInvoice() {
   return useMutation({
     mutationFn: async (data: { invoiceId: string }) => {
-      const fetchInvoice = httpsCallable(functions, 'fetchRazorpayInvoice');
-      const result = await fetchInvoice(data);
-      return result.data as { invoiceUrl: string };
-    },
-    onError: (error) => {
-      console.error('Fetch invoice error:', error);
+      return callFunction('/payments/invoice', data) as Promise<{ invoiceUrl: string }>;
     },
   });
 }
 
-/**
- * Track video usage mutation
- */
 export function useTrackVideoUsage() {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
 
   return useMutation({
-    mutationFn: async (data: {
-      videoId: string;
-      sessionId: string;
-      durationSeconds: number;
-    }) => {
-      const trackUsage = httpsCallable(functions, 'trackVideoUsage');
-      const result = await trackUsage(data);
-      return result.data as {
+    mutationFn: async (data: { videoId: string; sessionId: string; durationSeconds: number }) => {
+      return callFunction('/usage/track', data) as Promise<{
         success: boolean;
         creditsUsed: number;
         creditsRemaining: number;
-      };
+      }>;
     },
     onSuccess: () => {
-      const currentUser = queryClient.getQueryData(['auth', 'currentUser']) as any;
       if (currentUser?.uid) {
-        try {
-          sessionStorage.removeItem(`user_profile_${currentUser.uid}`);
-        } catch (error) {
-          console.error('Failed to clear profile cache:', error);
-        }
+        try { sessionStorage.removeItem(`user_profile_${currentUser.uid}`); } catch {}
       }
-
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
       queryClient.refetchQueries({ queryKey: ['userProfile'] });
       queryClient.invalidateQueries({ queryKey: ['activeSubscription'] });
-
-      console.log('[useTrackVideoUsage] Cache cleared and profile refetched successfully');
-    },
-    onError: (error) => {
-      console.error('Track video usage error:', error);
     },
   });
 }
 
 export function useMarkAllVideosAsTracked() {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
 
   return useMutation({
     mutationFn: async () => {
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('User must be authenticated');
 
-      if (!currentUser) {
-        throw new Error('User must be authenticated');
+      // Replaces: writeBatch(db) — Supabase bulk update in one call
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('id, usage_tracked')
+        .eq('user_id', currentUser.uid);
+
+      const untracked = (videos ?? []).filter(v => !v.usage_tracked).map(v => v.id);
+
+      if (untracked.length > 0) {
+        await supabase
+          .from('videos')
+          .update({ usage_tracked: true, usage_tracked_at: new Date().toISOString() })
+          .in('id', untracked);
       }
-
-      const userId = currentUser.uid;
-      console.log('[useMarkAllVideosAsTracked] Starting for user:', userId);
-
-      const videosRef = collection(db, `users/${userId}/videos`);
-      const videosSnapshot = await getDocs(videosRef);
-
-      let markedCount = 0;
-      let alreadyMarkedCount = 0;
-
-      const batch = writeBatch(db);
-
-      videosSnapshot.docs.forEach((videoDoc) => {
-        const videoData = videoDoc.data();
-
-        if (!videoData.usageTracked) {
-          batch.update(videoDoc.ref, {
-            usageTracked: true,
-            usageTrackedAt: serverTimestamp(),
-          });
-          markedCount++;
-        } else {
-          alreadyMarkedCount++;
-        }
-      });
-
-      await batch.commit();
-
-      console.log('[useMarkAllVideosAsTracked] Marked videos successfully:', markedCount, alreadyMarkedCount);
 
       return {
         success: true,
-        markedCount,
-        alreadyMarkedCount,
-        totalVideos: videosSnapshot.size,
+        markedCount: untracked.length,
+        alreadyMarkedCount: (videos?.length ?? 0) - untracked.length,
+        totalVideos: videos?.length ?? 0,
       };
     },
-    onSuccess: (data) => {
-      console.log('[useMarkAllVideosAsTracked] Videos marked successfully:', data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['videos'] });
-    },
-    onError: (error) => {
-      console.error('[useMarkAllVideosAsTracked] Error details:', error);
     },
   });
 }
 
 export function useResetCreditsForTesting() {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
 
   return useMutation({
     mutationFn: async () => {
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('User must be authenticated');
 
-      if (!currentUser) {
-        throw new Error('User must be authenticated');
-      }
-
-      const userId = currentUser.uid;
-      console.log('[useResetCreditsForTesting] Resetting credits for user:', userId);
-
-      const userRef = doc(db, `users/${userId}`);
-      await updateDoc(userRef, {
-        creditsUsed: 0,
-      });
-
-      console.log('[useResetCreditsForTesting] Credits reset to 0 successfully');
-
-      return {
-        success: true,
-        message: 'Credits reset to 0',
-      };
+      // Replaces: updateDoc(doc(db, 'users/${id}'), { creditsUsed: 0 })
+      await supabase.from('users').update({ credits_used: 0 }).eq('id', currentUser.uid);
+      return { success: true };
     },
-    onSuccess: (data) => {
-      console.log('[useResetCreditsForTesting] Credits reset successfully:', data);
-
-      const auth = getAuth();
-      const currentUser = auth.currentUser;
+    onSuccess: () => {
       if (currentUser?.uid) {
-        try {
-          sessionStorage.removeItem(`user_profile_${currentUser.uid}`);
-        } catch (error) {
-          console.error('Failed to clear profile cache:', error);
-        }
+        try { sessionStorage.removeItem(`user_profile_${currentUser.uid}`); } catch {}
       }
-
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
       queryClient.refetchQueries({ queryKey: ['userProfile'] });
-    },
-    onError: (error) => {
-      console.error('[useResetCreditsForTesting] Error details:', error);
     },
   });
 }

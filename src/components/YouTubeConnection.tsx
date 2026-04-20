@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions, YOUTUBE_OAUTH_CALLBACK_URL } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -17,6 +15,43 @@ interface YouTubeConnection {
   isActive: boolean;
 }
 
+// Netlify Function URL for YouTube OAuth callback (replaces Firebase Cloud Function URL)
+const YOUTUBE_OAUTH_CALLBACK_URL = `${window.location.origin}/.netlify/functions/youtubeOAuthCallback`;
+
+const API_BASE = import.meta.env.VITE_WORKERS_API_URL;
+
+// Helper: call Cloudflare Worker with Supabase auth token
+async function callFunction(path: string, body: object = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function fetchConnections(userId: string): Promise<YouTubeConnection[]> {
+  const { data: rows } = await supabase
+    .from('user_social_connections')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('platform', 'youtube')
+    .eq('is_active', true);
+
+  return (rows ?? []).map(row => ({
+    id: row.id,
+    platformUsername: row.channel_name,
+    platformThumbnail: null,
+    connectedAt: new Date(row.connected_at).getTime(),
+    isActive: true,
+  }));
+}
+
 export function YouTubeConnection() {
   const { currentUser } = useAuth();
   const [connections, setConnections] = useState<YouTubeConnection[]>([]);
@@ -25,56 +60,46 @@ export function YouTubeConnection() {
   const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser) { setLoading(false); return; }
+
+    const userId = currentUser.uid;
+
+    // Initial fetch
+    fetchConnections(userId).then(conns => {
+      setConnections(conns);
       setLoading(false);
-      return;
-    }
+    }).catch(() => {
+      toast.error('Failed to load YouTube connections');
+      setLoading(false);
+    });
 
-    // Listen to real-time updates for YouTube connections
-    const q = query(
-      collection(db, 'user_social_connections'),
-      where('userId', '==', currentUser.uid),
-      where('platform', '==', 'youtube'),
-      where('isActive', '==', true)
-    );
+    // Real-time: re-fetch whenever this user's connections change
+    // Replaces: onSnapshot(query(ref, where(...), where(...), where(...)))
+    const channel = supabase
+      .channel(`youtube_connections_${userId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'user_social_connections',
+        filter: `user_id=eq.${userId}`,
+      }, () => {
+        fetchConnections(userId).then(setConnections);
+      })
+      .subscribe();
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const conns = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as YouTubeConnection));
-        setConnections(conns);
-        setLoading(false);
-      },
-      (error) => {
-        console.error('Error fetching YouTube connections:', error);
-        toast.error('Failed to load YouTube connections');
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [currentUser]);
 
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      // Get auth URL from Cloud Function
-      // Important: redirectUri must point to the Cloud Function, not the frontend
-      const getAuthUrl = httpsCallable(functions, 'getYouTubeAuthUrl');
-      const result = await getAuthUrl({
+      // Replaces: httpsCallable(functions, 'getYouTubeAuthUrl')
+      const { authUrl } = await callFunction('/youtube/auth-url', {
         redirectUri: YOUTUBE_OAUTH_CALLBACK_URL,
-        frontendUrl: window.location.origin // Pass the actual frontend URL
+        frontendUrl: window.location.origin,
       });
-
-      const { authUrl } = result.data as { authUrl: string };
-
-      // Redirect to Google OAuth
       window.location.href = authUrl;
     } catch (error: any) {
-      console.error('Error connecting YouTube:', error);
       toast.error(error.message || 'Failed to connect YouTube. Please try again.');
       setConnecting(false);
     }
@@ -83,11 +108,10 @@ export function YouTubeConnection() {
   const handleDisconnect = async (connectionId: string) => {
     setDisconnecting(true);
     try {
-      const disconnectYouTube = httpsCallable(functions, 'disconnectYouTube');
-      await disconnectYouTube();
+      // Replaces: httpsCallable(functions, 'disconnectYouTube')
+      await callFunction('/youtube/disconnect', { connectionId });
       toast.success('YouTube account disconnected successfully');
     } catch (error: any) {
-      console.error('Error disconnecting YouTube:', error);
       toast.error(error.message || 'Failed to disconnect YouTube. Please try again.');
     } finally {
       setDisconnecting(false);
@@ -128,15 +152,9 @@ export function YouTubeConnection() {
               className="w-full bg-red-600 hover:bg-red-700 text-white"
             >
               {connecting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Connecting...
-                </>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Connecting...</>
               ) : (
-                <>
-                  <Youtube className="h-4 w-4 mr-2" />
-                  Connect YouTube Account
-                </>
+                <><Youtube className="h-4 w-4 mr-2" />Connect YouTube Account</>
               )}
             </Button>
 
@@ -149,17 +167,10 @@ export function YouTubeConnection() {
         ) : (
           <>
             {connections.map(conn => (
-              <div
-                key={conn.id}
-                className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30"
-              >
+              <div key={conn.id} className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
                 <div className="flex items-center gap-3">
                   {conn.platformThumbnail ? (
-                    <img
-                      src={conn.platformThumbnail}
-                      alt={conn.platformUsername}
-                      className="w-10 h-10 rounded-full"
-                    />
+                    <img src={conn.platformThumbnail} alt={conn.platformUsername} className="w-10 h-10 rounded-full" />
                   ) : (
                     <div className="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center text-white">
                       <Youtube className="h-5 w-5" />
@@ -182,11 +193,7 @@ export function YouTubeConnection() {
                   size="sm"
                   className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
                 >
-                  {disconnecting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    'Disconnect'
-                  )}
+                  {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
                 </Button>
               </div>
             ))}

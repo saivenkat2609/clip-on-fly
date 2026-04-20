@@ -11,8 +11,7 @@
  */
 
 import { useState } from 'react';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from 'sonner';
 
@@ -66,10 +65,7 @@ export function useRefreshVideoStatus() {
       console.log(`[Refresh] ✓ Got ${result.clips.length} clips from S3`);
       console.log(`[Refresh] Syncing to Firestore...`);
 
-      const videoRef = doc(db, `users/${userId}/videos`, sessionId);
-
-      // Prepare clips data for Firestore
-      const firestoreClips = result.clips.map((clip: any) => ({
+      const clips = result.clips.map((clip: any) => ({
         clipIndex: clip.clip_index,
         downloadUrl: clip.download_url,
         s3Key: clip.s3_key,
@@ -81,16 +77,15 @@ export function useRefreshVideoStatus() {
         score_breakdown: clip.score_breakdown,
         template_id: clip.template_id,
         template_name: clip.template_name,
-        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) // 3 days
+        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
       }));
 
-      // Update Firestore with completed status and clips
-      await updateDoc(videoRef, {
+      await supabase.from('videos').update({
         status: 'completed',
-        completedAt: serverTimestamp(),
-        clips: firestoreClips,
-        updatedAt: serverTimestamp()
-      });
+        completed_at: new Date().toISOString(),
+        clips,
+        updated_at: new Date().toISOString(),
+      }).eq('id', sessionId).eq('user_id', userId);
 
       console.log(`[Refresh] ✓ Firestore updated successfully`);
 

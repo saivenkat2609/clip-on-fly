@@ -16,13 +16,8 @@
  */
 
 import { useState, createContext, useContext, ReactNode } from 'react';
-import { auth } from '@/lib/firebase';
-import {
-  reauthenticateWithCredential,
-  reauthenticateWithPopup,
-  EmailAuthProvider,
-} from 'firebase/auth';
-import { googleProvider } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import { ReauthModal } from '@/components/ReauthModal';
 
 interface ReauthContextType {
@@ -45,24 +40,14 @@ export function ReauthProvider({ children }: ReauthProviderProps) {
    * Request re-authentication from user
    * Returns a Promise that resolves to true if successful, false if cancelled
    */
+  const { currentUser } = useAuth();
+
   const requestReauth = async (actionDescription: string): Promise<boolean> => {
-    const user = auth.currentUser;
-    if (!user) {
-      console.error('[Reauth] No current user');
-      return false;
-    }
+    if (!currentUser) return false;
 
-    // Determine provider type
-    const providerId = user.providerData[0]?.providerId;
-
-    if (providerId === 'password') {
-      setProviderType('password');
-    } else if (providerId === 'google.com') {
-      setProviderType('google');
-    } else {
-      console.error('[Reauth] Unsupported provider:', providerId);
-      return false;
-    }
+    const identities = currentUser.identities ?? [];
+    const isGoogle = identities.some(i => i.provider === 'google');
+    setProviderType(isGoogle ? 'google' : 'password');
 
     // Set action description
     setAction(actionDescription);
@@ -78,27 +63,27 @@ export function ReauthProvider({ children }: ReauthProviderProps) {
    * Handle password re-authentication
    */
   const handleReauth = async (password: string): Promise<boolean> => {
-    const user = auth.currentUser;
-    if (!user) return false;
+    if (!currentUser?.email) return false;
 
     try {
       if (providerType === 'password') {
-        // Password re-authentication
-        const credential = EmailAuthProvider.credential(user.email!, password);
-        await reauthenticateWithCredential(user, credential);
-        console.log('[Reauth] Password re-authentication successful');
+        const { error } = await supabase.auth.signInWithPassword({
+          email: currentUser.email,
+          password,
+        });
+        if (error) throw new Error(error.message);
         return true;
       } else if (providerType === 'google') {
-        // Google re-authentication
-        await reauthenticateWithPopup(user, googleProvider);
-        console.log('[Reauth] Google re-authentication successful');
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: window.location.href },
+        });
+        if (error) throw new Error(error.message);
         return true;
       }
-
       return false;
     } catch (error: any) {
-      console.error('[Reauth] Re-authentication failed:', error);
-      throw error; // Propagate error to modal for proper error handling
+      throw error;
     }
   };
 

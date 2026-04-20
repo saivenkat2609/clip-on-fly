@@ -21,9 +21,7 @@ import { YouTubeConnection } from "@/components/YouTubeConnection";
 import { SignInMethodCard } from "@/components/SignInMethodCard";
 import { PasswordInput } from "@/components/PasswordInput";
 import { cn } from "@/lib/utils";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { updateProfile, fetchSignInMethodsForEmail } from "firebase/auth";
-import { db, auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { useUserProfile, refreshUserProfile, useUserProfileRealtime } from "@/hooks/useUserProfile";
 
 export default function Settings() {
@@ -105,8 +103,8 @@ export default function Settings() {
     async function loadProviderInfo() {
       if (currentUser?.email) {
         try {
-          const signInMethods = await fetchSignInMethodsForEmail(auth, currentUser.email);
-          setHasPasswordProvider(signInMethods.includes('password'));
+          const providers = currentUser.identities?.map(i => i.provider) ?? [];
+          setHasPasswordProvider(providers.includes('email'));
         } catch (error) {
           console.error('Failed to load provider info:', error);
         }
@@ -170,16 +168,8 @@ export default function Settings() {
         ? `${firstName.trim()} ${lastName.trim()}`
         : firstName.trim();
 
-      // Update Firestore profile
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        displayName: displayName
-      });
-
-      // Update Firebase Auth profile (displayName)
-      await updateProfile(currentUser, {
-        displayName: displayName
-      });
+      await supabase.from('users').update({ display_name: displayName }).eq('id', currentUser.uid);
+      await supabase.auth.updateUser({ data: { display_name: displayName } });
 
       // Normalize values
       const normalizedFirstName = firstName.trim();
@@ -393,7 +383,7 @@ export default function Settings() {
     }
   };
 
-  const isGoogleUser = currentUser?.providerData.some(provider => provider.providerId === 'google.com');
+  const isGoogleUser = currentUser?.identities?.some(i => i.provider === 'google');
   const linkedProviders = getLinkedProviders();
 
   // Check if only one method is connected (to disable unlink button)

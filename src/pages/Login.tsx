@@ -11,8 +11,13 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Sparkles, Mail, Lock, Chrome, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
-import { fetchSignInMethodsForEmail } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
+
+// Replaces Firebase's fetchSignInMethodsForEmail — queries our users table
+async function getEmailProviders(email: string): Promise<string[]> {
+  const { data } = await supabase.from('users').select('providers').eq('email', email).maybeSingle();
+  return data?.providers ?? [];
+}
 import { PasswordInput } from '@/components/PasswordInput';
 import { setSessionPersistence } from '@/lib/sessionManager';
 import { cn } from '@/lib/utils';
@@ -154,10 +159,10 @@ export default function Login() {
   const checkEmailExists = useCallback(async (email: string) => {
     // Check if email already exists
     try {
-      const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+      const signInMethods = await getEmailProviders(email);
       if (signInMethods.length > 0) {
         setEmailValidationStatus('invalid');
-        const hasGoogle = signInMethods.includes('google.com');
+        const hasGoogle = signInMethods.includes("google");
         const hasPassword = signInMethods.includes('password');
 
         if (hasGoogle) {
@@ -242,14 +247,14 @@ export default function Login() {
     providerCheckTimerRef.current = setTimeout(async () => {
       try {
         console.log('Checking sign-in methods for:', email);
-        const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+        const signInMethods = await getEmailProviders(email);
         console.log('Sign-in methods found:', signInMethods);
 
         if (signInMethods.length === 0) {
           console.log('No sign-in methods found for:', email);
           // Don't show any message - Email Enumeration Protection is likely enabled
           setLoginEmailProvider(null);
-        } else if (signInMethods.includes('google.com') && !signInMethods.includes('password')) {
+        } else if (signInMethods.includes("google") && !signInMethods.includes('password')) {
           console.log('Google-only account detected for:', email);
           setLoginEmailProvider({
             status: 'detected',
@@ -381,7 +386,7 @@ export default function Login() {
       } else if (error.code === 'auth/user-not-found') {
         // Check if there might be a Google account
         try {
-          const methods = await fetchSignInMethodsForEmail(auth, loginEmail);
+          const methods = await getEmailProviders(loginEmail);
           if (methods.includes('google.com')) {
             // Google account exists, show provider conflict
             setProviderConflict({

@@ -15,8 +15,7 @@ import { useUserProfileRealtime } from "@/hooks/useUserProfile";
 import { useRefreshVideoStatus } from "@/hooks/useRefreshVideoStatus";
 import { ArrowLeft, Download, Eye, Loader2, AlertCircle, Calendar, Clock, Youtube, ThumbsUp, ThumbsDown, Filter, ArrowUpDown, Palette, RefreshCw, CheckCircle2, Circle, ArrowDownToLine, MessageSquare, Sparkles, Video, Edit3, Check, X, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { Template, templates } from "@/lib/templates";
 import { useTemplateReprocess } from "@/hooks/useTemplateReprocess";
 import { useVideoStatus } from "@/hooks/useWebSocket";
@@ -202,13 +201,8 @@ export default function ProjectDetails() {
 
     const fetchUserPlan = async () => {
       try {
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (userDocSnap.exists()) {
-          const userData = userDocSnap.data();
-          setUserPlan(userData.plan || 'Free');
-        }
+        const { data } = await supabase.from('users').select('plan').eq('id', currentUser.uid).single();
+        if (data) setUserPlan(data.plan || 'Free');
       } catch (err) {
         console.error("Error fetching user plan:", err);
       }
@@ -226,83 +220,43 @@ export default function ProjectDetails() {
 
     console.log(`[ProjectDetails] Setting up real-time listener for session: ${sessionId}`);
 
-    const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
     let previousClipsCount = 0;
 
-    // Try to get cached data first for instant display
-    const tryGetCachedVideo = async () => {
-      try {
-        const cacheKey = `user_videos_${currentUser.uid}`;
-        const cached = sessionStorage.getItem(cacheKey);
-        if (cached) {
-          const { data: videos } = JSON.parse(cached);
-          const cachedVideo = videos?.find((v: Video) => v.id === sessionId);
-          if (cachedVideo) {
-            console.log('[ProjectDetails] Found cached video data - showing immediately');
-            setVideo(cachedVideo);
-            setLoading(false);
-            previousClipsCount = cachedVideo.clips?.length || 0;
-            return true;
-          }
-        }
-      } catch (error) {
-        console.error('[ProjectDetails] Error reading cache:', error);
+    // Try cache first for instant display
+    try {
+      const cached = sessionStorage.getItem(`user_videos_${currentUser.uid}`);
+      if (cached) {
+        const { data: videos } = JSON.parse(cached);
+        const cachedVideo = videos?.find((v: Video) => v.id === sessionId);
+        if (cachedVideo) { setVideo(cachedVideo); setLoading(false); previousClipsCount = cachedVideo.clips?.length || 0; }
       }
-      return false;
-    };
+    } catch {}
 
-    // Try cache first
-    tryGetCachedVideo();
+    // Initial fetch
+    supabase.from('videos').select('*').eq('id', sessionId).eq('user_id', currentUser.uid).single()
+      .then(({ data: row }) => {
+        if (row) { setVideo(row as any); setLoading(false); previousClipsCount = row.clips?.length || 0; }
+        else { setError('Video not found'); setLoading(false); }
+      });
 
-    // Set up real-time listener
-    const unsubscribe = onSnapshot(
-      videoRef,
-      (videoSnap) => {
-        if (videoSnap.exists()) {
-          const videoData = {
-            id: videoSnap.id,
-            ...videoSnap.data()
-          } as Video;
-
+    // Real-time listener — replaces onSnapshot
+    const channel = supabase.channel(`video_detail_${sessionId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'videos', filter: `id=eq.${sessionId}` },
+        (payload) => {
+          const videoData = payload.new as any;
           const currentClipsCount = videoData.clips?.length || 0;
-
-          console.log(`[ProjectDetails] Video data updated:`, {
-            status: videoData.status,
-            clipsCount: currentClipsCount,
-            hasClips: currentClipsCount > 0,
-            previousClipsCount
-          });
-
-          // Show toast and confetti when clips are first added
           if (currentClipsCount > 0 && previousClipsCount === 0) {
-            console.log(`[ProjectDetails] Clips loaded! Showing ${currentClipsCount} clips`);
             toast.success(`Processing complete! ${currentClipsCount} clips generated`);
-            // Celebrate with confetti!
             setTimeout(() => celebrateSuccess(), 500);
           }
-
           previousClipsCount = currentClipsCount;
           setVideo(videoData);
           setLoading(false);
-          setError("");
-        } else {
-          console.error("[ProjectDetails] Video not found");
-          setError("Video not found");
-          setLoading(false);
-        }
-      },
-      (err) => {
-        console.error("[ProjectDetails] Firestore listener error:", err);
-        setError("Failed to load video details");
-        setLoading(false);
-      }
-    );
+          setError('');
+        })
+      .subscribe();
 
-    // Cleanup listener on unmount
-    return () => {
-      console.log("[ProjectDetails] Cleaning up Firestore listener");
-      unsubscribe();
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [currentUser, sessionId]);
 
   // Track video usage when processing completes - CRITICAL: Prevent multiple calls
@@ -402,10 +356,8 @@ export default function ProjectDetails() {
     if (!currentUser || !sessionId || !video || !editedTitle.trim()) return;
 
     try {
-      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await updateDoc(videoRef, {
-        'videoInfo.title': editedTitle.trim()
-      });
+      const { data: existing } = await supabase.from('videos').select('video_info').eq('id', sessionId).single();
+      await supabase.from('videos').update({ video_info: { ...(existing?.video_info || {}), title: editedTitle.trim() } }).eq('id', sessionId);
       toast.success("Title updated successfully");
       setIsEditingTitle(false);
     } catch (err) {
@@ -437,8 +389,7 @@ export default function ProjectDetails() {
     });
 
     try {
-      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await updateDoc(videoRef, { clips: updatedClips });
+      await supabase.from('videos').update({ clips: updatedClips }).eq('id', sessionId).eq('user_id', currentUser.uid);
       console.log(`[ProjectDetails] Thumbnail saved successfully for clip ${clipIndex}`);
     } catch (err) {
       console.error("Error saving thumbnail:", err);
@@ -461,8 +412,7 @@ export default function ProjectDetails() {
     });
 
     try {
-      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await updateDoc(videoRef, { clips: updatedClips });
+      await supabase.from('videos').update({ clips: updatedClips }).eq('id', sessionId).eq('user_id', currentUser.uid);
       setVideo({ ...video, clips: updatedClips });
       toast.success(updatedClips?.find(c => c.clipIndex === clipIndex)?.liked ? "Clip liked" : "Like removed");
     } catch (err) {
@@ -486,8 +436,7 @@ export default function ProjectDetails() {
     });
 
     try {
-      const videoRef = doc(db, `users/${currentUser.uid}/videos`, sessionId);
-      await updateDoc(videoRef, { clips: updatedClips });
+      await supabase.from('videos').update({ clips: updatedClips }).eq('id', sessionId).eq('user_id', currentUser.uid);
       setVideo({ ...video, clips: updatedClips });
       toast.success(updatedClips?.find(c => c.clipIndex === clipIndex)?.disliked ? "Clip disliked" : "Dislike removed");
     } catch (err) {
