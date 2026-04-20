@@ -2,10 +2,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, CreditCard, Lock } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCreateSubscription, useVerifyPayment } from '@/hooks/useSubscription';
-import { openRazorpayCheckout } from '@/lib/razorpay';
+import { openRazorpayCheckout, loadRazorpayScript } from '@/lib/razorpay';
 import { useToast } from '@/hooks/use-toast';
 import { formatPrice, type PlanName, type BillingPeriod, type Currency } from '@/lib/pricing';
 import { useQueryClient } from '@tanstack/react-query';
@@ -34,6 +34,11 @@ export function PaymentModal({
 
   const createSubscription = useCreateSubscription();
   const verifyPayment = useVerifyPayment();
+
+  // Pre-load Razorpay SDK as soon as the modal opens so it's ready when user clicks Pay
+  useEffect(() => {
+    if (isOpen) loadRazorpayScript();
+  }, [isOpen]);
 
   const handlePayment = async () => {
     if (!currentUser) {
@@ -66,13 +71,9 @@ export function PaymentModal({
       });
 
       // Step 2: Close this modal BEFORE opening Razorpay
-      // This prevents modal stacking and focus issues
       onClose();
 
-      // Minimal delay - just enough for modal animation
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      // Step 3: Open Razorpay checkout (modal is now closed)
+      // Step 3: Open Razorpay checkout (SDK already loaded, modal is now closed)
       await openRazorpayCheckout({
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         subscription_id: subscriptionData.subscriptionId,
