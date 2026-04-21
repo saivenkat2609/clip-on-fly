@@ -85,7 +85,7 @@ export function useRefreshVideoStatus() {
         completed_at: new Date().toISOString(),
         clips,
         updated_at: new Date().toISOString(),
-      }).eq('id', sessionId).eq('user_id', userId);
+      }).eq('session_id', sessionId).eq('user_id', userId);
 
       console.log(`[Refresh] ✓ Firestore updated successfully`);
 

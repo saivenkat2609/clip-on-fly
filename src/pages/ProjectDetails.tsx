@@ -227,13 +227,13 @@ export default function ProjectDetails() {
       const cached = sessionStorage.getItem(`user_videos_${currentUser.uid}`);
       if (cached) {
         const { data: videos } = JSON.parse(cached);
-        const cachedVideo = videos?.find((v: Video) => v.id === sessionId);
+        const cachedVideo = videos?.find((v: Video) => v.session_id === sessionId);
         if (cachedVideo) { setVideo(cachedVideo); setLoading(false); previousClipsCount = cachedVideo.clips?.length || 0; }
       }
     } catch {}
 
     // Initial fetch
-    supabase.from('videos').select('*').eq('id', sessionId).eq('user_id', currentUser.uid).single()
+    supabase.from('videos').select('*').eq('session_id', sessionId).eq('user_id', currentUser.uid).single()
       .then(({ data: row }) => {
         if (row) { setVideo(row as any); setLoading(false); previousClipsCount = row.clips?.length || 0; }
         else { setError('Video not found'); setLoading(false); }
@@ -241,7 +241,7 @@ export default function ProjectDetails() {
 
     // Real-time listener — replaces onSnapshot
     const channel = supabase.channel(`video_detail_${sessionId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'videos', filter: `id=eq.${sessionId}` },
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'videos', filter: `session_id=eq.${sessionId}` },
         (payload) => {
           const videoData = payload.new as any;
           const currentClipsCount = videoData.clips?.length || 0;
@@ -356,8 +356,8 @@ export default function ProjectDetails() {
     if (!currentUser || !sessionId || !video || !editedTitle.trim()) return;
 
     try {
-      const { data: existing } = await supabase.from('videos').select('video_info').eq('id', sessionId).single();
-      await supabase.from('videos').update({ video_info: { ...(existing?.video_info || {}), title: editedTitle.trim() } }).eq('id', sessionId);
+      const { data: existing } = await supabase.from('videos').select('video_info').eq('session_id', sessionId).single();
+      await supabase.from('videos').update({ video_info: { ...(existing?.video_info || {}), title: editedTitle.trim() } }).eq('session_id', sessionId);
       toast.success("Title updated successfully");
       setIsEditingTitle(false);
     } catch (err) {
@@ -389,7 +389,7 @@ export default function ProjectDetails() {
     });
 
     try {
-      await supabase.from('videos').update({ clips: updatedClips }).eq('id', sessionId).eq('user_id', currentUser.uid);
+      await supabase.from('videos').update({ clips: updatedClips }).eq('session_id', sessionId).eq('user_id', currentUser.uid);
       console.log(`[ProjectDetails] Thumbnail saved successfully for clip ${clipIndex}`);
     } catch (err) {
       console.error("Error saving thumbnail:", err);
@@ -412,7 +412,7 @@ export default function ProjectDetails() {
     });
 
     try {
-      await supabase.from('videos').update({ clips: updatedClips }).eq('id', sessionId).eq('user_id', currentUser.uid);
+      await supabase.from('videos').update({ clips: updatedClips }).eq('session_id', sessionId).eq('user_id', currentUser.uid);
       setVideo({ ...video, clips: updatedClips });
       toast.success(updatedClips?.find(c => c.clipIndex === clipIndex)?.liked ? "Clip liked" : "Like removed");
     } catch (err) {
@@ -436,7 +436,7 @@ export default function ProjectDetails() {
     });
 
     try {
-      await supabase.from('videos').update({ clips: updatedClips }).eq('id', sessionId).eq('user_id', currentUser.uid);
+      await supabase.from('videos').update({ clips: updatedClips }).eq('session_id', sessionId).eq('user_id', currentUser.uid);
       setVideo({ ...video, clips: updatedClips });
       toast.success(updatedClips?.find(c => c.clipIndex === clipIndex)?.disliked ? "Clip disliked" : "Dislike removed");
     } catch (err) {

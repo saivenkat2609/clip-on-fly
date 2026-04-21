@@ -174,7 +174,7 @@ export function ExportModal({
       const { data: videoData, error: fetchError } = await supabase
         .from('videos')
         .select('clips')
-        .eq('id', sessionId)
+        .eq('session_id', sessionId)
         .eq('user_id', currentUser.uid)
         .single();
       if (fetchError) throw fetchError;
@@ -191,7 +191,7 @@ export function ExportModal({
       const { error: updateError } = await supabase
         .from('videos')
         .update({ clips: updatedClips })
-        .eq('id', sessionId)
+        .eq('session_id', sessionId)
         .eq('user_id', currentUser.uid);
       if (updateError) throw updateError;
 
