@@ -78,7 +78,7 @@ export default function Login() {
   } | null>(null);
 
   // Ref for debouncing provider check
-  const providerCheckTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const providerCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Account linking modal state
   const [linkingModal, setLinkingModal] = useState<{
@@ -154,7 +154,7 @@ export default function Login() {
   }, [currentUser, authLoading, googleLoading, loading, navigate, from]);
 
   // UI/UX FIX #90: Debounced email API check
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const checkEmailExists = useCallback(async (email: string) => {
     // Check if email already exists
@@ -582,7 +582,7 @@ export default function Login() {
     setGoogleLoading(true);
     try {
       // Link the Google credential to the existing password account
-      await linkGoogleProvider(linkingModal.pendingCredential);
+      await linkGoogleProvider();
 
       setLinkingModal(null);
       toast({
@@ -630,7 +630,9 @@ export default function Login() {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">Clip on Fly</span>
+            <span className="text-xl font-bold text-foreground">
+              Clip on Fly
+            </span>
           </Link>
         </div>
       </nav>
@@ -661,22 +663,40 @@ export default function Login() {
                   Transform Videos into Viral Clips
                 </h1>
                 <p className="text-lg text-muted-foreground">
-                  AI-powered video editing that turns long-form content into engaging short clips automatically
+                  AI-powered video editing that turns long-form content into
+                  engaging short clips automatically
                 </p>
               </div>
 
               {/* Features */}
               <div className="grid gap-4 text-left mt-8">
                 {[
-                  { icon: '⚡', title: 'Lightning Fast', desc: 'Process videos in minutes, not hours' },
-                  { icon: '🎨', title: 'Beautiful Templates', desc: 'Professional designs for every platform' },
-                  { icon: '🚀', title: 'Boost Engagement', desc: 'Maximize reach with optimized clips' }
+                  {
+                    icon: "⚡",
+                    title: "Lightning Fast",
+                    desc: "Process videos in minutes, not hours",
+                  },
+                  {
+                    icon: "🎨",
+                    title: "Beautiful Templates",
+                    desc: "Professional designs for every platform",
+                  },
+                  {
+                    icon: "🚀",
+                    title: "Boost Engagement",
+                    desc: "Maximize reach with optimized clips",
+                  },
                 ].map((feature, i) => (
-                  <div key={i} className="flex items-start gap-3 p-4 rounded-lg bg-background/50 backdrop-blur border border-border/50">
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 p-4 rounded-lg bg-background/50 backdrop-blur border border-border/50"
+                  >
                     <span className="text-2xl">{feature.icon}</span>
                     <div>
                       <h3 className="font-semibold">{feature.title}</h3>
-                      <p className="text-sm text-muted-foreground">{feature.desc}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {feature.desc}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -688,14 +708,16 @@ export default function Login() {
                   {[1, 2, 3, 4].map((i) => (
                     <img
                       key={i}
-                      src={`/avatars/avatar${i}.png`}
+                      src={`https://pub-a42da8500209450c8fb64926d3bcd10a.r2.dev/Avatars/avatar${i}.png`}
                       alt={`Creator ${i}`}
                       className="h-8 w-8 rounded-full border-2 border-background object-cover"
                     />
                   ))}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Join <span className="font-semibold text-foreground">500+</span> creators
+                  Join{" "}
+                  <span className="font-semibold text-foreground">500+</span>{" "}
+                  creators
                 </p>
               </div>
             </div>
@@ -710,357 +732,412 @@ export default function Login() {
         <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-background">
           <div className="w-full max-w-md">
             <Card className="shadow-2xl border-border/50">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center">
-              {isSignUp ? 'Create an account' : 'Welcome back'}
-            </CardTitle>
-            <CardDescription className="text-center">
-              {isSignUp
-                ? 'Sign up to start creating amazing content'
-                : 'Sign in to your account to continue'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Provider Conflict Alert (MongoDB Atlas Style) */}
-            {providerConflict && (
-              <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
-                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
-                  <p className="font-medium">{providerConflict.message}</p>
-                </AlertDescription>
-              </Alert>
-            )}
+              <CardHeader className="space-y-1">
+                <CardTitle className="text-2xl font-bold text-center">
+                  {isSignUp ? "Create an account" : "Welcome back"}
+                </CardTitle>
+                <CardDescription className="text-center">
+                  {isSignUp
+                    ? "Sign up to start creating amazing content"
+                    : "Sign in to your account to continue"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Provider Conflict Alert (MongoDB Atlas Style) */}
+                {providerConflict && (
+                  <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
+                    <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                      <p className="font-medium">{providerConflict.message}</p>
+                    </AlertDescription>
+                  </Alert>
+                )}
 
-            {/* Google Sign In */}
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={handleGoogleSignIn}
-              disabled={googleLoading || loading}
-            >
-              <Chrome className="mr-2 h-4 w-4" />
-              {googleLoading ? 'Signing in...' : 'Continue with Google'}
-            </Button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with email
-                </span>
-              </div>
-            </div>
-
-            {/* Sign Up Form */}
-            {isSignUp ? (
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="signup-email" className="text-sm font-medium">
-                    Email
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={signupEmail}
-                      onChange={(e) => handleSignupEmailChange(e.target.value)}
-                      disabled={loading}
-                      className={`pl-10 ${
-                        emailValidationStatus === 'valid'
-                          ? 'pr-10 border-green-500 focus:border-green-500'
-                          : emailValidationStatus === 'invalid'
-                          ? 'pr-10 border-red-500 focus:border-red-500'
-                          : 'pr-10'
-                      }`}
-                    />
-                    {emailValidationStatus === 'valid' && (
-                      <CheckCircle2 className="absolute right-3 top-3 h-4 w-4 text-green-500" />
-                    )}
-                    {emailValidationStatus === 'invalid' && (
-                      <AlertCircle className="absolute right-3 top-3 h-4 w-4 text-red-500" />
-                    )}
-                  </div>
-                  {emailValidationStatus === 'valid' && !signupErrors.email && (
-                    <p className="text-sm text-green-600 flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Valid email address
-                    </p>
-                  )}
-                  {signupErrors.email && (
-                    <p className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {signupErrors.email}
-                    </p>
-                  )}
-                </div>
-
-                {/* Enhanced Password Input with Strength Meter */}
-                <PasswordInput
-                  label="Password"
-                  value={signupPassword}
-                  onChange={(value) => {
-                    setSignupPassword(value);
-                    setSignupErrors(prev => ({ ...prev, password: '' }));
-                  }}
-                  placeholder="Create a strong password"
-                  showStrengthMeter={true}
-                  checkBreaches={true}
-                  error={signupErrors.password}
-                  required={true}
-                  autoComplete="new-password"
-                  onBreachStatusChange={setIsPasswordBreached}
-                />
-
-                <div className="space-y-2">
-                  <label htmlFor="signup-confirm-password" className="text-sm font-medium">
-                    Confirm Password
-                    <span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="signup-confirm-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupConfirmPassword}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setSignupConfirmPassword(value);
-                        // UI/UX FIX #87: Real-time password match feedback
-                        if (value && signupPassword && value !== signupPassword) {
-                          setSignupErrors(prev => ({ ...prev, confirmPassword: "Passwords don't match" }));
-                        } else {
-                          setSignupErrors(prev => ({ ...prev, confirmPassword: '' }));
-                        }
-                      }}
-                      disabled={loading}
-                      className="pl-10"
-                    />
-                  </div>
-                  {signupErrors.confirmPassword && (
-                    <p className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {signupErrors.confirmPassword}
-                    </p>
-                  )}
-                </div>
-
-                {/* Disable button if password is breached or too short */}
+                {/* Google Sign In */}
                 <Button
-                  type="submit"
-                  className="w-full gradient-primary"
-                  disabled={
-                    loading ||
-                    isPasswordBreached ||
-                    signupPassword.length < 8 ||
-                    signupPassword !== signupConfirmPassword ||
-                    emailValidationStatus === 'invalid'
-                  }
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleGoogleSignIn}
+                  disabled={googleLoading || loading}
                 >
-                  {loading ? 'Creating account...' : 'Create account'}
+                  <Chrome className="mr-2 h-4 w-4" />
+                  {googleLoading ? "Signing in..." : "Continue with Google"}
                 </Button>
 
-                {/* Helper text when button is disabled */}
-                {!loading && (isPasswordBreached || signupPassword.length < 8 || signupPassword !== signupConfirmPassword) && signupPassword && (
-                  <p className="text-xs text-center text-muted-foreground">
-                    {isPasswordBreached && '⚠️ Cannot create account with breached password'}
-                    {!isPasswordBreached && signupPassword.length < 8 && '⚠️ Password must be at least 8 characters'}
-                    {!isPasswordBreached && signupPassword.length >= 8 && signupPassword !== signupConfirmPassword && '⚠️ Passwords must match'}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <Separator />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      Or continue with email
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sign Up Form */}
+                {isSignUp ? (
+                  <form onSubmit={handleSignup} className="space-y-4">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="signup-email"
+                        className="text-sm font-medium"
+                      >
+                        Email
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="signup-email"
+                          type="email"
+                          placeholder="you@example.com"
+                          value={signupEmail}
+                          onChange={(e) =>
+                            handleSignupEmailChange(e.target.value)
+                          }
+                          disabled={loading}
+                          className={`pl-10 ${
+                            emailValidationStatus === "valid"
+                              ? "pr-10 border-green-500 focus:border-green-500"
+                              : emailValidationStatus === "invalid"
+                                ? "pr-10 border-red-500 focus:border-red-500"
+                                : "pr-10"
+                          }`}
+                        />
+                        {emailValidationStatus === "valid" && (
+                          <CheckCircle2 className="absolute right-3 top-3 h-4 w-4 text-green-500" />
+                        )}
+                        {emailValidationStatus === "invalid" && (
+                          <AlertCircle className="absolute right-3 top-3 h-4 w-4 text-red-500" />
+                        )}
+                      </div>
+                      {emailValidationStatus === "valid" &&
+                        !signupErrors.email && (
+                          <p className="text-sm text-green-600 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Valid email address
+                          </p>
+                        )}
+                      {signupErrors.email && (
+                        <p className="text-sm text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {signupErrors.email}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Enhanced Password Input with Strength Meter */}
+                    <PasswordInput
+                      label="Password"
+                      value={signupPassword}
+                      onChange={(value) => {
+                        setSignupPassword(value);
+                        setSignupErrors((prev) => ({ ...prev, password: "" }));
+                      }}
+                      placeholder="Create a strong password"
+                      showStrengthMeter={true}
+                      checkBreaches={true}
+                      error={signupErrors.password}
+                      required={true}
+                      autoComplete="new-password"
+                      onBreachStatusChange={setIsPasswordBreached}
+                    />
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="signup-confirm-password"
+                        className="text-sm font-medium"
+                      >
+                        Confirm Password
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="signup-confirm-password"
+                          type="password"
+                          placeholder="••••••••"
+                          value={signupConfirmPassword}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setSignupConfirmPassword(value);
+                            // UI/UX FIX #87: Real-time password match feedback
+                            if (
+                              value &&
+                              signupPassword &&
+                              value !== signupPassword
+                            ) {
+                              setSignupErrors((prev) => ({
+                                ...prev,
+                                confirmPassword: "Passwords don't match",
+                              }));
+                            } else {
+                              setSignupErrors((prev) => ({
+                                ...prev,
+                                confirmPassword: "",
+                              }));
+                            }
+                          }}
+                          disabled={loading}
+                          className="pl-10"
+                        />
+                      </div>
+                      {signupErrors.confirmPassword && (
+                        <p className="text-sm text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {signupErrors.confirmPassword}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Disable button if password is breached or too short */}
+                    <Button
+                      type="submit"
+                      className="w-full gradient-primary"
+                      disabled={
+                        loading ||
+                        isPasswordBreached ||
+                        signupPassword.length < 8 ||
+                        signupPassword !== signupConfirmPassword ||
+                        emailValidationStatus === "invalid"
+                      }
+                    >
+                      {loading ? "Creating account..." : "Create account"}
+                    </Button>
+
+                    {/* Helper text when button is disabled */}
+                    {!loading &&
+                      (isPasswordBreached ||
+                        signupPassword.length < 8 ||
+                        signupPassword !== signupConfirmPassword) &&
+                      signupPassword && (
+                        <p className="text-xs text-center text-muted-foreground">
+                          {isPasswordBreached &&
+                            "⚠️ Cannot create account with breached password"}
+                          {!isPasswordBreached &&
+                            signupPassword.length < 8 &&
+                            "⚠️ Password must be at least 8 characters"}
+                          {!isPasswordBreached &&
+                            signupPassword.length >= 8 &&
+                            signupPassword !== signupConfirmPassword &&
+                            "⚠️ Passwords must match"}
+                        </p>
+                      )}
+                  </form>
+                ) : (
+                  /* Login Form */
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="login-email"
+                        className="text-sm font-medium"
+                      >
+                        Email
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="login-email"
+                          type="email"
+                          placeholder="you@example.com"
+                          value={loginEmail}
+                          onChange={(e) =>
+                            handleLoginEmailChange(e.target.value)
+                          }
+                          disabled={loading}
+                          className={cn(
+                            "pl-10",
+                            loginEmailProvider?.provider === "google" &&
+                              "border-blue-500",
+                          )}
+                        />
+                      </div>
+
+                      {/* Provider detection hint */}
+                      {loginEmailProvider?.status === "detected" &&
+                        loginEmailProvider.provider === "google" && (
+                          <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
+                            <Info className="h-4 w-4 text-blue-600" />
+                            <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                              <p className="font-medium">
+                                {loginEmailProvider.message}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={handleGoogleSignIn}
+                              >
+                                <Chrome className="mr-2 h-3 w-3" />
+                                Sign in with Google
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        )}
+
+                      {loginEmailProvider?.status === "detected" &&
+                        loginEmailProvider.provider === "none" && (
+                          <p className="text-sm text-orange-600 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            {loginEmailProvider.message}
+                          </p>
+                        )}
+
+                      {loginErrors.email && (
+                        <p className="text-sm text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {loginErrors.email}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="login-password"
+                        className="text-sm font-medium"
+                      >
+                        Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="login-password"
+                          type="password"
+                          placeholder="••••••••"
+                          value={loginPassword}
+                          onChange={(e) => {
+                            setLoginPassword(e.target.value);
+                            setLoginErrors((prev) => ({
+                              ...prev,
+                              password: "",
+                            }));
+                          }}
+                          disabled={loading}
+                          className="pl-10"
+                        />
+                      </div>
+                      {loginErrors.password && (
+                        <p className="text-sm text-red-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {loginErrors.password}
+                        </p>
+                      )}
+
+                      {/* Failed Attempts Warning */}
+                      {failedLoginAttempts >= 3 && (
+                        <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
+                          <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                              {5 - failedLoginAttempts > 0
+                                ? `${5 - failedLoginAttempts} attempts left`
+                                : "Too many attempts"}
+                            </p>
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                              Try "Forgot password?" if you need help
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Remember Me & Forgot Password */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="remember-me"
+                          checked={rememberMe}
+                          onCheckedChange={(checked) =>
+                            setRememberMe(!!checked)
+                          }
+                          className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                        />
+                        <Label
+                          htmlFor="remember-me"
+                          className="text-sm font-medium cursor-pointer select-none"
+                        >
+                          Remember me
+                        </Label>
+                      </div>
+                      <Link
+                        to="/forgot-password"
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full gradient-primary"
+                      disabled={loading}
+                    >
+                      {loading ? "Signing in..." : "Sign in"}
+                    </Button>
+                  </form>
+                )}
+              </CardContent>
+              <CardFooter className="flex flex-col space-y-2">
+                <div className="text-sm text-muted-foreground text-center">
+                  {isSignUp ? (
+                    <>
+                      Already have an account?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSignUp(false);
+                          setProviderConflict(null); // Clear alert on manual switch
+                        }}
+                        className="text-primary hover:underline font-medium"
+                      >
+                        Sign in
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      Don't have an account?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSignUp(true);
+                          setProviderConflict(null); // Clear alert on manual switch
+                        }}
+                        className="text-primary hover:underline font-medium"
+                      >
+                        Sign up
+                      </button>
+                    </>
+                  )}
+                </div>
+                {isSignUp && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    By signing up, you agree to our{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLegalModal({ open: true, type: "terms" })
+                      }
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Terms of Service
+                    </button>{" "}
+                    and{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLegalModal({ open: true, type: "privacy" })
+                      }
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Privacy Policy
+                    </button>
+                    . We do not accept temporary or disposable email addresses.
                   </p>
                 )}
-              </form>
-            ) : (
-              /* Login Form */
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="login-email" className="text-sm font-medium">
-                    Email
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={loginEmail}
-                      onChange={(e) => handleLoginEmailChange(e.target.value)}
-                      disabled={loading}
-                      className={cn(
-                        "pl-10",
-                        loginEmailProvider?.provider === 'google' && "border-blue-500"
-                      )}
-                    />
-                  </div>
-
-                  {/* Provider detection hint */}
-                  {loginEmailProvider?.status === 'detected' && loginEmailProvider.provider === 'google' && (
-                    <Alert className="border-blue-500 bg-blue-50 dark:bg-blue-950">
-                      <Info className="h-4 w-4 text-blue-600" />
-                      <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
-                        <p className="font-medium">{loginEmailProvider.message}</p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={handleGoogleSignIn}
-                        >
-                          <Chrome className="mr-2 h-3 w-3" />
-                          Sign in with Google
-                        </Button>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {loginEmailProvider?.status === 'detected' && loginEmailProvider.provider === 'none' && (
-                    <p className="text-sm text-orange-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {loginEmailProvider.message}
-                    </p>
-                  )}
-
-                  {loginErrors.email && (
-                    <p className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {loginErrors.email}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <label htmlFor="login-password" className="text-sm font-medium">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => {
-                        setLoginPassword(e.target.value);
-                        setLoginErrors(prev => ({ ...prev, password: '' }));
-                      }}
-                      disabled={loading}
-                      className="pl-10"
-                    />
-                  </div>
-                  {loginErrors.password && (
-                    <p className="text-sm text-red-600 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {loginErrors.password}
-                    </p>
-                  )}
-
-                  {/* Failed Attempts Warning */}
-                  {failedLoginAttempts >= 3 && (
-                    <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
-                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
-                          {5 - failedLoginAttempts > 0
-                            ? `${5 - failedLoginAttempts} attempts left`
-                            : 'Too many attempts'}
-                        </p>
-                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
-                          Try "Forgot password?" if you need help
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Remember Me & Forgot Password */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="remember-me"
-                      checked={rememberMe}
-                      onCheckedChange={(checked) => setRememberMe(!!checked)}
-                      className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                    />
-                    <Label
-                      htmlFor="remember-me"
-                      className="text-sm font-medium cursor-pointer select-none"
-                    >
-                      Remember me
-                    </Label>
-                  </div>
-                  <Link
-                    to="/forgot-password"
-                    className="text-sm font-medium text-primary hover:underline"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-
-                <Button type="submit" className="w-full gradient-primary" disabled={loading}>
-                  {loading ? 'Signing in...' : 'Sign in'}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-2">
-            <div className="text-sm text-muted-foreground text-center">
-              {isSignUp ? (
-                <>
-                  Already have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(false);
-                      setProviderConflict(null); // Clear alert on manual switch
-                    }}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Sign in
-                  </button>
-                </>
-              ) : (
-                <>
-                  Don't have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSignUp(true);
-                      setProviderConflict(null); // Clear alert on manual switch
-                    }}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Sign up
-                  </button>
-                </>
-              )}
-            </div>
-            {isSignUp && (
-              <p className="text-xs text-muted-foreground text-center">
-                By signing up, you agree to our{' '}
-                <button
-                  type="button"
-                  onClick={() => setLegalModal({ open: true, type: 'terms' })}
-                  className="text-primary hover:underline font-medium"
-                >
-                  Terms of Service
-                </button>
-                {' '}and{' '}
-                <button
-                  type="button"
-                  onClick={() => setLegalModal({ open: true, type: 'privacy' })}
-                  className="text-primary hover:underline font-medium"
-                >
-                  Privacy Policy
-                </button>
-                . We do not accept temporary or disposable email addresses.
-              </p>
-            )}
-          </CardFooter>
-        </Card>
+              </CardFooter>
+            </Card>
           </div>
         </div>
       </div>

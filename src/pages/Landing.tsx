@@ -162,11 +162,13 @@ export default function Landing() {
             <div className="hidden md:flex items-center gap-1 bg-muted/50 rounded-lg p-1">
               <button
                 onClick={() => {
-                  const element = document.getElementById('features');
+                  const element = document.getElementById("features");
                   const offset = 80;
-                  const elementPosition = element?.getBoundingClientRect().top ?? 0;
-                  const offsetPosition = elementPosition + window.pageYOffset - offset;
-                  window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+                  const elementPosition =
+                    element?.getBoundingClientRect().top ?? 0;
+                  const offsetPosition =
+                    elementPosition + window.pageYOffset - offset;
+                  window.scrollTo({ top: offsetPosition, behavior: "smooth" });
                 }}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-background rounded-md transition-all"
               >
@@ -174,11 +176,13 @@ export default function Landing() {
               </button>
               <button
                 onClick={() => {
-                  const element = document.getElementById('demo');
+                  const element = document.getElementById("demo");
                   const offset = 80;
-                  const elementPosition = element?.getBoundingClientRect().top ?? 0;
-                  const offsetPosition = elementPosition + window.pageYOffset - offset;
-                  window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+                  const elementPosition =
+                    element?.getBoundingClientRect().top ?? 0;
+                  const offsetPosition =
+                    elementPosition + window.pageYOffset - offset;
+                  window.scrollTo({ top: offsetPosition, behavior: "smooth" });
                 }}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-background rounded-md transition-all"
               >
@@ -186,11 +190,13 @@ export default function Landing() {
               </button>
               <button
                 onClick={() => {
-                  const element = document.getElementById('pricing');
+                  const element = document.getElementById("pricing");
                   const offset = 80;
-                  const elementPosition = element?.getBoundingClientRect().top ?? 0;
-                  const offsetPosition = elementPosition + window.pageYOffset - offset;
-                  window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+                  const elementPosition =
+                    element?.getBoundingClientRect().top ?? 0;
+                  const offsetPosition =
+                    elementPosition + window.pageYOffset - offset;
+                  window.scrollTo({ top: offsetPosition, behavior: "smooth" });
                 }}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-background rounded-md transition-all"
               >
@@ -198,11 +204,13 @@ export default function Landing() {
               </button>
               <button
                 onClick={() => {
-                  const element = document.getElementById('faq');
+                  const element = document.getElementById("faq");
                   const offset = 80;
-                  const elementPosition = element?.getBoundingClientRect().top ?? 0;
-                  const offsetPosition = elementPosition + window.pageYOffset - offset;
-                  window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+                  const elementPosition =
+                    element?.getBoundingClientRect().top ?? 0;
+                  const offsetPosition =
+                    elementPosition + window.pageYOffset - offset;
+                  window.scrollTo({ top: offsetPosition, behavior: "smooth" });
                 }}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-background rounded-md transition-all"
               >
@@ -219,7 +227,9 @@ export default function Landing() {
               ) : (
                 <>
                   <Link to="/login">
-                    <Button variant="ghost" className="hidden sm:inline-flex">Sign In</Button>
+                    <Button variant="ghost" className="hidden sm:inline-flex">
+                      Sign In
+                    </Button>
                   </Link>
                   <Link to="/login">
                     <Button className="gradient-primary">Get Started</Button>
@@ -246,7 +256,7 @@ export default function Landing() {
                   {[1, 2, 3, 4].map((i) => (
                     <img
                       key={i}
-                      src={`/avatars/avatar${i}.png`}
+                      src={`https://pub-a42da8500209450c8fb64926d3bcd10a.r2.dev/Avatars/avatar${i}.png`}
                       alt={`Creator ${i}`}
                       className="h-8 w-8 rounded-full object-cover ring-2 ring-background"
                     />
@@ -281,27 +291,39 @@ export default function Landing() {
               </h1>
 
               <p className="text-xl md:text-2xl text-muted-foreground mb-10 max-w-3xl mx-auto leading-relaxed">
-                AI automatically finds the best moments, edits, adds captions, and exports ready-to-post clips for TikTok, YouTube Shorts, and Instagram Reels
+                AI automatically finds the best moments, edits, adds captions,
+                and exports ready-to-post clips for TikTok, YouTube Shorts, and
+                Instagram Reels
               </p>
 
               <div className="flex flex-col items-center mb-16">
                 <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
                   {currentUser ? (
                     <Link to="/dashboard">
-                      <Button size="lg" className="gradient-primary shadow-glow text-lg h-16 px-10 font-semibold">
+                      <Button
+                        size="lg"
+                        className="gradient-primary shadow-glow text-lg h-16 px-10 font-semibold"
+                      >
                         <Sparkles className="h-5 w-5 mr-2" />
                         Go to Dashboard
                       </Button>
                     </Link>
                   ) : (
                     <Link to="/login">
-                      <Button size="lg" className="gradient-primary shadow-glow text-lg h-16 px-10 font-semibold">
+                      <Button
+                        size="lg"
+                        className="gradient-primary shadow-glow text-lg h-16 px-10 font-semibold"
+                      >
                         <Sparkles className="h-5 w-5 mr-2" />
                         Start Free Trial
                       </Button>
                     </Link>
                   )}
-                  <Button size="lg" variant="outline" className="text-lg h-16 px-10 font-semibold border-2 border-primary/30 hover:bg-primary/10 hover:border-primary hover:text-primary transition-all">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="text-lg h-16 px-10 font-semibold border-2 border-primary/30 hover:bg-primary/10 hover:border-primary hover:text-primary transition-all"
+                  >
                     <Video className="h-5 w-5 mr-2" />
                     Watch Demo
                   </Button>
@@ -348,7 +370,10 @@ export default function Landing() {
                     {/* Sample video frames */}
                     <div className="absolute bottom-4 left-4 right-4 flex gap-2">
                       {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="flex-1 h-16 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 backdrop-blur-sm border border-white/10" />
+                        <div
+                          key={i}
+                          className="flex-1 h-16 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 backdrop-blur-sm border border-white/10"
+                        />
                       ))}
                     </div>
                   </div>
@@ -363,8 +388,12 @@ export default function Landing() {
                       <Check className="h-6 w-6 text-green-500" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">23 clips generated</p>
-                      <p className="text-xs text-muted-foreground">in 2 minutes</p>
+                      <p className="text-sm font-semibold">
+                        23 clips generated
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        in 2 minutes
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -378,7 +407,9 @@ export default function Landing() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold">AI Processing</p>
-                      <p className="text-xs text-muted-foreground">Finding best moments</p>
+                      <p className="text-xs text-muted-foreground">
+                        Finding best moments
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -397,7 +428,7 @@ export default function Landing() {
                 { value: "8k+", label: "Clips Created", icon: Video },
                 { value: "500+", label: "Active Creators", icon: Users },
                 { value: "100+", label: "Hours Saved Daily", icon: Clock },
-                { value: "4.6/5", label: "User Rating", icon: Star }
+                { value: "4.6/5", label: "User Rating", icon: Star },
               ].map((stat) => (
                 <div key={stat.label} className="text-center group">
                   <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 mb-4 group-hover:scale-110 transition-transform">
@@ -423,7 +454,9 @@ export default function Landing() {
             <span className="inline-block px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-4">
               SIMPLE WORKFLOW
             </span>
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">How It Works</h2>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">
+              How It Works
+            </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               From long-form to viral shorts in just three steps
             </p>
@@ -433,24 +466,27 @@ export default function Landing() {
               {
                 step: "01",
                 title: "Upload Video",
-                description: "Upload your long-form content or paste a URL from YouTube, Vimeo, or any platform",
+                description:
+                  "Upload your long-form content or paste a URL from YouTube, Vimeo, or any platform",
                 icon: Upload,
-                gradient: "from-blue-500 to-cyan-500"
+                gradient: "from-blue-500 to-cyan-500",
               },
               {
                 step: "02",
                 title: "AI Magic",
-                description: "Our AI analyzes your content, identifies viral moments, and creates perfectly edited clips",
+                description:
+                  "Our AI analyzes your content, identifies viral moments, and creates perfectly edited clips",
                 icon: Wand2,
-                gradient: "from-purple-500 to-pink-500"
+                gradient: "from-purple-500 to-pink-500",
               },
               {
                 step: "03",
                 title: "Export & Share",
-                description: "Download clips optimized for TikTok, Reels, Shorts with captions and branding included",
+                description:
+                  "Download clips optimized for TikTok, Reels, Shorts with captions and branding included",
                 icon: Download,
-                gradient: "from-orange-500 to-red-500"
-              }
+                gradient: "from-orange-500 to-red-500",
+              },
             ].map((item, index) => (
               <div key={item.step} className="relative">
                 {/* Connector line */}
@@ -459,16 +495,22 @@ export default function Landing() {
                 )}
 
                 <Card className="relative overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-primary/20 h-full">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${item.gradient} opacity-5`} />
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${item.gradient} opacity-5`}
+                  />
                   <CardContent className="p-8 text-center relative">
-                    <div className={`inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br ${item.gradient} mb-6 shadow-lg`}>
+                    <div
+                      className={`inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br ${item.gradient} mb-6 shadow-lg`}
+                    >
                       <item.icon className="h-8 w-8 text-white" />
                     </div>
                     <div className="text-primary/20 font-bold text-7xl absolute top-4 right-4">
                       {item.step}
                     </div>
                     <h3 className="text-2xl font-bold mb-3">{item.title}</h3>
-                    <p className="text-muted-foreground leading-relaxed">{item.description}</p>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {item.description}
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -502,10 +544,14 @@ export default function Landing() {
                       <Check className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg mb-2">What We Access</h3>
+                      <h3 className="font-semibold text-lg mb-2">
+                        What We Access
+                      </h3>
                       <p className="text-muted-foreground leading-relaxed">
-                        When you connect your YouTube account, we request permission to upload videos to your channel.
-                        We access your basic channel information (name, profile picture) to display in your dashboard.
+                        When you connect your YouTube account, we request
+                        permission to upload videos to your channel. We access
+                        your basic channel information (name, profile picture)
+                        to display in your dashboard.
                       </p>
                     </div>
                   </div>
@@ -518,10 +564,13 @@ export default function Landing() {
                       <Video className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg mb-2">Why We Need It</h3>
+                      <h3 className="font-semibold text-lg mb-2">
+                        Why We Need It
+                      </h3>
                       <p className="text-muted-foreground leading-relaxed">
-                        To enable you to publish your edited clips directly to YouTube with one click. This eliminates
-                        the need to download and manually upload each clip, saving you time.
+                        To enable you to publish your edited clips directly to
+                        YouTube with one click. This eliminates the need to
+                        download and manually upload each clip, saving you time.
                       </p>
                     </div>
                   </div>
@@ -534,23 +583,37 @@ export default function Landing() {
                       <Check className="h-5 w-5 text-green-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg mb-2">What We DON'T Do</h3>
+                      <h3 className="font-semibold text-lg mb-2">
+                        What We DON'T Do
+                      </h3>
                       <ul className="space-y-2 text-muted-foreground">
                         <li className="flex items-start gap-2">
                           <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
-                          <span>We never access or modify your existing YouTube videos</span>
+                          <span>
+                            We never access or modify your existing YouTube
+                            videos
+                          </span>
                         </li>
                         <li className="flex items-start gap-2">
                           <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
-                          <span>We never upload content without your explicit permission</span>
+                          <span>
+                            We never upload content without your explicit
+                            permission
+                          </span>
                         </li>
                         <li className="flex items-start gap-2">
                           <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
-                          <span>We never share your data with third parties for advertising</span>
+                          <span>
+                            We never share your data with third parties for
+                            advertising
+                          </span>
                         </li>
                         <li className="flex items-start gap-2">
                           <Check className="h-4 w-4 text-green-600 mt-1 flex-shrink-0" />
-                          <span>We never store copies of videos you upload to YouTube</span>
+                          <span>
+                            We never store copies of videos you upload to
+                            YouTube
+                          </span>
                         </li>
                       </ul>
                     </div>
@@ -560,8 +623,11 @@ export default function Landing() {
                 {/* Revoke Access */}
                 <div className="pt-4 border-t">
                   <p className="text-sm text-muted-foreground">
-                    <strong className="text-foreground">You're in control:</strong> Disconnect your YouTube account
-                    anytime from your settings, or revoke access directly in your{' '}
+                    <strong className="text-foreground">
+                      You're in control:
+                    </strong>{" "}
+                    Disconnect your YouTube account anytime from your settings,
+                    or revoke access directly in your{" "}
                     <a
                       href="https://myaccount.google.com/permissions"
                       target="_blank"
@@ -569,10 +635,15 @@ export default function Landing() {
                       className="text-primary hover:underline"
                     >
                       Google Account Permissions
-                    </a>.{' '}
-                    <Link to="/privacy" className="text-primary hover:underline">
+                    </a>
+                    .{" "}
+                    <Link
+                      to="/privacy"
+                      className="text-primary hover:underline"
+                    >
                       Read our full Privacy Policy
-                    </Link>.
+                    </Link>
+                    .
                   </p>
                 </div>
               </CardContent>
@@ -607,17 +678,28 @@ export default function Landing() {
                 "from-orange-500 to-red-500",
                 "from-green-500 to-emerald-500",
                 "from-indigo-500 to-purple-500",
-                "from-amber-500 to-orange-500"
+                "from-amber-500 to-orange-500",
               ];
               return (
-                <Card key={feature.title} className="relative overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-primary/20 group">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${gradients[index]} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
+                <Card
+                  key={feature.title}
+                  className="relative overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-primary/20 group"
+                >
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${gradients[index]} opacity-0 group-hover:opacity-5 transition-opacity duration-300`}
+                  />
                   <CardContent className="p-6 relative">
-                    <div className={`inline-flex items-center justify-center h-14 w-14 rounded-xl bg-gradient-to-br ${gradients[index]} mb-4 shadow-md group-hover:scale-110 transition-transform duration-300`}>
+                    <div
+                      className={`inline-flex items-center justify-center h-14 w-14 rounded-xl bg-gradient-to-br ${gradients[index]} mb-4 shadow-md group-hover:scale-110 transition-transform duration-300`}
+                    >
                       <feature.icon className="h-7 w-7 text-white" />
                     </div>
-                    <h3 className="text-lg font-bold mb-2 group-hover:text-primary transition-colors">{feature.title}</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
+                    <h3 className="text-lg font-bold mb-2 group-hover:text-primary transition-colors">
+                      {feature.title}
+                    </h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      {feature.description}
+                    </p>
                   </CardContent>
                 </Card>
               );
@@ -640,37 +722,51 @@ export default function Landing() {
                 Thousands of Creators
               </span>
             </h2>
-            <p className="text-xl text-muted-foreground">See what our users are saying</p>
+            <p className="text-xl text-muted-foreground">
+              See what our users are saying
+            </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {testimonials.map((testimonial, index) => (
-              <Card key={testimonial.name} className="relative shadow-lg hover:shadow-2xl transition-all duration-300 border-2 hover:border-primary/20 group overflow-hidden">
+              <Card
+                key={testimonial.name}
+                className="relative shadow-lg hover:shadow-2xl transition-all duration-300 border-2 hover:border-primary/20 group overflow-hidden"
+              >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/10 to-accent/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-500" />
                 <CardContent className="p-6 relative">
                   {/* Avatar Circle */}
                   <div className="flex items-center gap-4 mb-4">
                     <img
-                      src={`/avatars/avatar${(index % 4) + 1}.png`}
+                      src={`https://pub-a42da8500209450c8fb64926d3bcd10a.r2.dev/Avatars/avatar${(index % 4) + 1}.png`}
                       alt={testimonial.name}
                       className="h-12 w-12 rounded-full object-cover shadow-md ring-2 ring-primary/20"
                     />
                     <div>
                       <p className="font-semibold">{testimonial.name}</p>
-                      <p className="text-sm text-muted-foreground">{testimonial.role}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {testimonial.role}
+                      </p>
                     </div>
                   </div>
 
                   {/* Stars */}
                   <div className="flex gap-1 mb-4">
                     {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="h-5 w-5 fill-primary text-primary" />
+                      <Star
+                        key={i}
+                        className="h-5 w-5 fill-primary text-primary"
+                      />
                     ))}
                   </div>
 
                   {/* Quote */}
                   <div className="relative">
-                    <div className="absolute -top-2 -left-2 text-6xl text-primary/10 font-serif">"</div>
-                    <p className="text-sm leading-relaxed relative z-10 italic">{testimonial.content}</p>
+                    <div className="absolute -top-2 -left-2 text-6xl text-primary/10 font-serif">
+                      "
+                    </div>
+                    <p className="text-sm leading-relaxed relative z-10 italic">
+                      {testimonial.content}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -693,7 +789,9 @@ export default function Landing() {
                 Pricing Plans
               </span>
             </h2>
-            <p className="text-xl text-muted-foreground">Choose the plan that fits your needs</p>
+            <p className="text-xl text-muted-foreground">
+              Choose the plan that fits your needs
+            </p>
           </div>
           <div className="max-w-6xl mx-auto">
             <PricingPlans onUpgrade={handleUpgrade} />
@@ -715,14 +813,20 @@ export default function Landing() {
                 We've Got Answers
               </span>
             </h2>
-            <p className="text-xl text-muted-foreground">Everything you need to know about Clip on Fly</p>
+            <p className="text-xl text-muted-foreground">
+              Everything you need to know about Clip on Fly
+            </p>
           </div>
           <div className="max-w-3xl mx-auto">
             <Card className="shadow-lg border-2">
               <CardContent className="p-6">
                 <Accordion type="single" collapsible>
                   {faqs.map((faq, index) => (
-                    <AccordionItem key={index} value={`item-${index}`} className="border-b last:border-0">
+                    <AccordionItem
+                      key={index}
+                      value={`item-${index}`}
+                      className="border-b last:border-0"
+                    >
                       <AccordionTrigger className="text-left text-lg font-semibold hover:text-primary transition-colors py-6">
                         {faq.question}
                       </AccordionTrigger>
@@ -769,27 +873,40 @@ export default function Landing() {
 
                 {/* Description */}
                 <p className="text-xl md:text-2xl text-white/90 mb-10 max-w-3xl mx-auto leading-relaxed">
-                  Join thousands of creators who are already making viral content with Clip on Fly
+                  Join thousands of creators who are already making viral
+                  content with Clip on Fly
                 </p>
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   {currentUser ? (
                     <Link to="/dashboard">
-                      <Button size="lg" variant="secondary" className="text-lg h-16 px-10 font-semibold shadow-2xl hover:scale-105 transition-transform">
+                      <Button
+                        size="lg"
+                        variant="secondary"
+                        className="text-lg h-16 px-10 font-semibold shadow-2xl hover:scale-105 transition-transform"
+                      >
                         <Sparkles className="h-5 w-5 mr-2" />
                         Go to Dashboard
                       </Button>
                     </Link>
                   ) : (
                     <Link to="/login">
-                      <Button size="lg" variant="secondary" className="text-lg h-16 px-10 font-semibold shadow-2xl hover:scale-105 transition-transform">
+                      <Button
+                        size="lg"
+                        variant="secondary"
+                        className="text-lg h-16 px-10 font-semibold shadow-2xl hover:scale-105 transition-transform"
+                      >
                         <Sparkles className="h-5 w-5 mr-2" />
                         Start Creating Now
                       </Button>
                     </Link>
                   )}
-                  <Button size="lg" variant="outline" className="text-lg h-16 px-10 font-semibold bg-white/10 border-2 border-white/30 text-white hover:bg-white/25 hover:border-white/60 backdrop-blur-sm transition-all">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="text-lg h-16 px-10 font-semibold bg-white/10 border-2 border-white/30 text-white hover:bg-white/25 hover:border-white/60 backdrop-blur-sm transition-all"
+                  >
                     <Video className="h-5 w-5 mr-2" />
                     Watch Demo
                   </Button>
