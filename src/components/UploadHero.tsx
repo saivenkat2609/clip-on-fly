@@ -475,13 +475,25 @@ export function UploadHero() {
 
   return (
     <div className="relative">
-      <Card className="shadow-large border-border/50 overflow-hidden">
+      <Card className="relative z-10 shadow-large border-border/50 overflow-hidden">
         <CardContent className="p-8 md:p-10">
-          <div className="max-w-3xl mx-auto space-y-6">
-
+          {/* Brand watermark — 100vw wide, centered on viewport, sits behind the card */}
+          <div
+            className="pointer-events-none select-none absolute top-1/2 z-0 flex items-center justify-center"
+            style={{
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "100vw",
+            }}
+            aria-hidden="true"
+          >
+            <span className="text-[16vw] font-black tracking-tighter whitespace-nowrap leading-none text-black/[0.06] dark:text-white/[0.06]">
+              Clip on Fly
+            </span>
+          </div>
+          <div className="relative z-10 max-w-3xl mx-auto space-y-6 bg-card rounded-2xl">
             {/* Main Content Box */}
             <div className="bg-gradient-to-br from-primary/5 via-accent/5 to-background rounded-2xl p-6 md:p-8 border border-border/40 shadow-sm hover:shadow-md transition-shadow">
-
               {/* Input Section with integrated button */}
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -492,7 +504,7 @@ export function UploadHero() {
                         viewBox="0 0 24 24"
                         xmlns="http://www.w3.org/2000/svg"
                       >
-                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                       </svg>
                     </div>
                     <Input
@@ -501,7 +513,13 @@ export function UploadHero() {
                       value={videoUrl}
                       onChange={(e) => setVideoUrl(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !loading && youtubeValidation.isValid && !youtubeValidation.isValidating && youtubeValidation.hasEnoughCredits) {
+                        if (
+                          e.key === "Enter" &&
+                          !loading &&
+                          youtubeValidation.isValid &&
+                          !youtubeValidation.isValidating &&
+                          youtubeValidation.hasEnoughCredits
+                        ) {
                           handleQuickProcess();
                         }
                       }}
@@ -540,10 +558,10 @@ export function UploadHero() {
                     <motion.div
                       key={
                         youtubeValidation.isValidating
-                          ? 'validating'
+                          ? "validating"
                           : youtubeValidation.isValid
-                          ? 'valid'
-                          : 'error'
+                            ? "valid"
+                            : "error"
                       }
                       variants={slideUpVariants}
                       initial="initial"
@@ -555,70 +573,91 @@ export function UploadHero() {
                       {youtubeValidation.isValidating && (
                         <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                           <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
-                          <span className="text-sm text-blue-900 dark:text-blue-100">Validating video (checking duration and credits)...</span>
+                          <span className="text-sm text-blue-900 dark:text-blue-100">
+                            Validating video (checking duration and credits)...
+                          </span>
                         </div>
                       )}
 
                       {/* Valid State - Show Video Info */}
-                      {!youtubeValidation.isValidating && youtubeValidation.isValid && youtubeValidation.videoInfo && (
-                        <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-                          {/* Thumbnail */}
-                          {youtubeValidation.videoInfo.thumbnail && (
-                            <img
-                              src={youtubeValidation.videoInfo.thumbnail}
-                              alt="Video thumbnail"
-                              className="w-16 h-12 rounded object-cover flex-shrink-0"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-green-900 dark:text-green-100 truncate">
-                                  {youtubeValidation.videoInfo.title}
-                                </p>
-                                <div className="mt-1 text-xs text-green-700 dark:text-green-400">
-                                  <span>By {youtubeValidation.videoInfo.author}</span>
-                                  {youtubeValidation.videoInfo.duration > 0 && (
-                                    <>
-                                      <span className="mx-2">•</span>
-                                      <span>{youtubeValidation.videoInfo.durationFormatted}</span>
-                                    </>
-                                  )}
-                                  {youtubeValidation.creditsRequired > 0 && (
-                                    <>
-                                      <span className="mx-2">•</span>
-                                      <span className="font-medium">{youtubeValidation.creditsRequired} credits required</span>
-                                    </>
-                                  )}
+                      {!youtubeValidation.isValidating &&
+                        youtubeValidation.isValid &&
+                        youtubeValidation.videoInfo && (
+                          <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                            {/* Thumbnail */}
+                            {youtubeValidation.videoInfo.thumbnail && (
+                              <img
+                                src={youtubeValidation.videoInfo.thumbnail}
+                                alt="Video thumbnail"
+                                className="w-16 h-12 rounded object-cover flex-shrink-0"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start gap-2">
+                                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-green-900 dark:text-green-100 truncate">
+                                    {youtubeValidation.videoInfo.title}
+                                  </p>
+                                  <div className="mt-1 text-xs text-green-700 dark:text-green-400">
+                                    <span>
+                                      By {youtubeValidation.videoInfo.author}
+                                    </span>
+                                    {youtubeValidation.videoInfo.duration >
+                                      0 && (
+                                      <>
+                                        <span className="mx-2">•</span>
+                                        <span>
+                                          {
+                                            youtubeValidation.videoInfo
+                                              .durationFormatted
+                                          }
+                                        </span>
+                                      </>
+                                    )}
+                                    {youtubeValidation.creditsRequired > 0 && (
+                                      <>
+                                        <span className="mx-2">•</span>
+                                        <span className="font-medium">
+                                          {youtubeValidation.creditsRequired}{" "}
+                                          credits required
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {youtubeValidation.hasEnoughCredits &&
+                                    youtubeValidation.creditsRequired > 0 && (
+                                      <p className="mt-1 text-xs text-green-600 dark:text-green-500 font-medium">
+                                        ✓ Ready to process
+                                      </p>
+                                    )}
+                                  {!youtubeValidation.hasEnoughCredits &&
+                                    youtubeValidation.creditsRequired > 0 && (
+                                      <p className="mt-1 text-xs text-red-600 dark:text-red-500 font-medium">
+                                        ⚠ Insufficient credits (need{" "}
+                                        {youtubeValidation.creditsRequired},
+                                        have {remainingCredits})
+                                      </p>
+                                    )}
                                 </div>
-                                {youtubeValidation.hasEnoughCredits && youtubeValidation.creditsRequired > 0 && (
-                                  <p className="mt-1 text-xs text-green-600 dark:text-green-500 font-medium">
-                                    ✓ Ready to process
-                                  </p>
-                                )}
-                                {!youtubeValidation.hasEnoughCredits && youtubeValidation.creditsRequired > 0 && (
-                                  <p className="mt-1 text-xs text-red-600 dark:text-red-500 font-medium">
-                                    ⚠ Insufficient credits (need {youtubeValidation.creditsRequired}, have {remainingCredits})
-                                  </p>
-                                )}
                               </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* Error State */}
-                      {!youtubeValidation.isValidating && !youtubeValidation.isValid && youtubeValidation.error && (
-                        <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
-                          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-red-900 dark:text-red-100">
-                              {youtubeValidation.error}
-                            </p>
+                      {!youtubeValidation.isValidating &&
+                        !youtubeValidation.isValid &&
+                        youtubeValidation.error && (
+                          <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                                {youtubeValidation.error}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -626,7 +665,9 @@ export function UploadHero() {
                 {/* Or separator */}
                 <div className="flex items-center gap-3 py-1">
                   <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/60 to-border/60"></div>
-                  <span className="text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider px-2">Or</span>
+                  <span className="text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider px-2">
+                    Or
+                  </span>
                   <div className="flex-1 h-px bg-gradient-to-l from-transparent via-border/60 to-border/60"></div>
                 </div>
 
@@ -659,7 +700,9 @@ export function UploadHero() {
                         <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0" />
                       </motion.div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate text-foreground">{selectedFile.name}</p>
+                        <p className="font-semibold text-sm truncate text-foreground">
+                          {selectedFile.name}
+                        </p>
                         <p className="text-xs text-muted-foreground font-medium">
                           {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                         </p>
@@ -704,7 +747,9 @@ export function UploadHero() {
                         onClick={handleUploadClick}
                       >
                         <Upload className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                        <span className="font-medium">Upload from Computer</span>
+                        <span className="font-medium">
+                          Upload from Computer
+                        </span>
                       </Button>
                     </motion.div>
                   )}
@@ -713,9 +758,11 @@ export function UploadHero() {
 
               {/* Compact Settings Row - Single line */}
               <div className="mt-4 flex items-center gap-2 flex-wrap">
-
                 {/* Template Selection Dropdown */}
-                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <Select
+                  value={selectedTemplateId}
+                  onValueChange={setSelectedTemplateId}
+                >
                   <SelectTrigger className="h-9 w-[180px] bg-background/60 border-border/60">
                     <SelectValue placeholder="Select template" />
                   </SelectTrigger>
@@ -729,7 +776,10 @@ export function UploadHero() {
                 </Select>
 
                 {/* Timeframe Dropdown - With Clock Icon */}
-                <Select value={selectedTimeframe} onValueChange={setSelectedTimeframe}>
+                <Select
+                  value={selectedTimeframe}
+                  onValueChange={setSelectedTimeframe}
+                >
                   <SelectTrigger className="h-9 w-[120px] bg-background/60 border-border/60">
                     <div className="flex items-center gap-2">
                       <Clock className="h-3.5 w-3.5" />
@@ -745,7 +795,10 @@ export function UploadHero() {
                 </Select>
 
                 {/* Number of Clips Dropdown - With Layers Icon */}
-                <Select value={selectedNumClips} onValueChange={setSelectedNumClips}>
+                <Select
+                  value={selectedNumClips}
+                  onValueChange={setSelectedNumClips}
+                >
                   <SelectTrigger className="h-9 w-[120px] bg-background/60 border-border/60">
                     <div className="flex items-center gap-2">
                       <Layers className="h-3.5 w-3.5" />
@@ -764,14 +817,16 @@ export function UploadHero() {
                 <div className="flex border border-border/60 rounded-md overflow-hidden bg-background/60">
                   <Button
                     type="button"
-                    variant={selectedResolution === '9:16' ? "default" : "ghost"}
+                    variant={
+                      selectedResolution === "9:16" ? "default" : "ghost"
+                    }
                     size="sm"
                     className={`h-9 w-9 p-0 rounded-none border-0 ${
-                      selectedResolution === '9:16'
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      selectedResolution === "9:16"
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     }`}
-                    onClick={() => setSelectedResolution('9:16')}
+                    onClick={() => setSelectedResolution("9:16")}
                     title="9:16 Vertical (Mobile)"
                   >
                     <Smartphone className="h-4 w-4" />
@@ -779,14 +834,16 @@ export function UploadHero() {
                   <div className="w-px bg-border/60"></div>
                   <Button
                     type="button"
-                    variant={selectedResolution === '16:9' ? "default" : "ghost"}
+                    variant={
+                      selectedResolution === "16:9" ? "default" : "ghost"
+                    }
                     size="sm"
                     className={`h-9 w-9 p-0 rounded-none border-0 ${
-                      selectedResolution === '16:9'
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      selectedResolution === "16:9"
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     }`}
-                    onClick={() => setSelectedResolution('16:9')}
+                    onClick={() => setSelectedResolution("16:9")}
                     title="16:9 Horizontal (Desktop)"
                   >
                     <Monitor className="h-4 w-4" />
@@ -812,27 +869,38 @@ export function UploadHero() {
                 <div className="mb-3 p-3 rounded-full bg-primary/10 group-hover:bg-primary/20 group-hover:scale-110 transition-all">
                   <Sparkles className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-semibold text-sm mb-1 text-foreground">Viral Clips</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">AI finds engaging moments</p>
+                <h3 className="font-semibold text-sm mb-1 text-foreground">
+                  Viral Clips
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  AI finds engaging moments
+                </p>
               </div>
 
               <div className="flex flex-col items-center text-center p-5 rounded-xl bg-primary/5 border border-primary/20 hover:border-primary/40 hover:shadow-md transition-all group cursor-default">
                 <div className="mb-3 p-3 rounded-full bg-primary/10 group-hover:bg-primary/20 group-hover:scale-110 transition-all">
                   <Type className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-semibold text-sm mb-1 text-foreground">Auto Captions</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">Smart subtitle generation</p>
+                <h3 className="font-semibold text-sm mb-1 text-foreground">
+                  Auto Captions
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Smart subtitle generation
+                </p>
               </div>
 
               <div className="flex flex-col items-center text-center p-5 rounded-xl bg-primary/5 border border-primary/20 hover:border-primary/40 hover:shadow-md transition-all group cursor-default">
                 <div className="mb-3 p-3 rounded-full bg-primary/10 group-hover:bg-primary/20 group-hover:scale-110 transition-all">
                   <Crop className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-semibold text-sm mb-1 text-foreground">Smart Reframe</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">Perfect crop every time</p>
+                <h3 className="font-semibold text-sm mb-1 text-foreground">
+                  Smart Reframe
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Perfect crop every time
+                </p>
               </div>
             </div>
-
           </div>
         </CardContent>
       </Card>

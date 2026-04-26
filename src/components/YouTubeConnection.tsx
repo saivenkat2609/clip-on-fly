@@ -15,8 +15,8 @@ interface YouTubeConnection {
   isActive: boolean;
 }
 
-// Netlify Function URL for YouTube OAuth callback (replaces Firebase Cloud Function URL)
-const YOUTUBE_OAUTH_CALLBACK_URL = `${window.location.origin}/.netlify/functions/youtubeOAuthCallback`;
+// Cloudflare Worker handles the YouTube OAuth callback
+const YOUTUBE_OAUTH_CALLBACK_URL = `${import.meta.env.VITE_WORKERS_API_URL}/youtube/callback`;
 
 const API_BASE = import.meta.env.VITE_WORKERS_API_URL;
 

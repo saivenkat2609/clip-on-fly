@@ -600,16 +600,6 @@ export default function Settings() {
                       </div>
                     ))}
                   </RadioGroup>
-
-                  {/* Info text */}
-                  <div className="mt-4 text-center">
-                    {!isAdmin && (
-                      <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
-                        <Crown className="h-3 w-3" />
-                        Additional themes available for admin users
-                      </p>
-                    )}
-                  </div>
                 </div>
 
                 <div className="flex justify-end pt-4 border-t border-border">
