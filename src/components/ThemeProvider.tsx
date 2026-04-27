@@ -77,27 +77,13 @@ export function ThemeProvider({
             .from('users').select('theme, mode').eq('id', currentUser.uid).maybeSingle();
 
           if (userData) {
-            const firestoreTheme = userData.theme as Theme || defaultTheme;
-            const firestoreMode = (userData as any).mode as Mode || defaultMode;
-
-            // Only update if different from cache
-            const cachedTheme = localStorage.getItem(`theme_${currentUser.uid}`);
-            const cachedMode = localStorage.getItem(`mode_${currentUser.uid}`);
-
-            if (firestoreTheme !== cachedTheme || firestoreMode !== cachedMode) {
-              // UI/UX FIX #95: Remove production logging
-              if (import.meta.env.DEV) {
-                console.log('[ThemeProvider] Firestore theme differs from cache - updating');
-              }
-              setTheme(firestoreTheme);
-              setMode(firestoreMode);
-              localStorage.setItem(`theme_${currentUser.uid}`, firestoreTheme);
-              localStorage.setItem(`mode_${currentUser.uid}`, firestoreMode);
-            } else {
-              if (import.meta.env.DEV) {
-                console.log('[ThemeProvider] Using cached theme (matches Firestore)');
-              }
-            }
+            const dbTheme = userData.theme as Theme || defaultTheme;
+            const dbMode = (userData as any).mode as Mode || defaultMode;
+            // Always apply DB values — initial state may be "ocean" before auth loaded
+            setTheme(dbTheme);
+            setMode(dbMode);
+            localStorage.setItem(`theme_${currentUser.uid}`, dbTheme);
+            localStorage.setItem(`mode_${currentUser.uid}`, dbMode);
           }
         } catch (error) {
           console.error('Failed to sync theme from Firestore:', error);

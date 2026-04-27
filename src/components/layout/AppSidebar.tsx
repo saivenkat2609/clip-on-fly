@@ -1,6 +1,7 @@
-import { Home, Upload, Layout, CreditCard, Settings, Sparkles, LogOut, User, FolderOpen, Users } from "lucide-react";
+import { Home, Upload, Layout, CreditCard, Settings, Sparkles, LogOut, User, FolderOpen, Users, PanelLeft, Share2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useMemo } from "react";
 import {
@@ -32,53 +33,36 @@ const baseMenuItems = [
   { title: "Upload", url: "/upload", icon: Upload },
   { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Templates", url: "/templates", icon: Layout },
+  { title: "Social Accounts", url: "/social", icon: Share2 },
   { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
-const adminMenuItem = {
-  title: "Users",
-  url: "/admin/users",
-  icon: Users,
-};
+const adminMenuItem = { title: "Users", url: "/admin/users", icon: Users };
 
 export function AppSidebar() {
-  const { state } = useSidebar();
-  const location = useLocation();
+  const { state, toggleSidebar } = useSidebar();
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const { data: userProfile } = useUserProfileRealtime();
   const isCollapsed = state === "collapsed";
 
-  // Check if user is admin
-  const isAdmin = userProfile?.role === 'admin';
+  const isAdmin = userProfile?.role === "admin";
 
-  // Build menu items based on user role
   const menuItems = useMemo(() => {
-    if (isAdmin) {
-      // Insert admin menu item after Dashboard (at index 1)
-      return [
-        baseMenuItems[0], // Dashboard
-        adminMenuItem,    // Users (Admin only)
-        ...baseMenuItems.slice(1), // Rest of items
-      ];
-    }
+    if (isAdmin) return [baseMenuItems[0], adminMenuItem, ...baseMenuItems.slice(1)];
     return baseMenuItems;
   }, [isAdmin]);
 
+  const displayName = userProfile?.displayName || currentUser?.displayName || "";
+
   const getUserInitials = () => {
-    if (!currentUser) return "??";
-    if (currentUser.displayName) {
-      const names = currentUser.displayName.split(" ");
-      if (names.length >= 2) {
-        return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
-      }
-      return currentUser.displayName.substring(0, 2).toUpperCase();
+    if (displayName) {
+      const names = displayName.trim().split(" ");
+      if (names.length >= 2) return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+      return displayName.substring(0, 2).toUpperCase();
     }
-    if (currentUser.email) {
-      return currentUser.email.substring(0, 2).toUpperCase();
-    }
-    return "U";
+    return currentUser?.email?.substring(0, 2).toUpperCase() ?? "U";
   };
 
   const handleLogout = async () => {
@@ -91,61 +75,95 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className={cn(
-      isCollapsed ? "w-16" : "w-64",
-      "border-r border-sidebar-border shadow-sm"
-    )} collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border p-4 transition-all">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-dark shadow-md group-hover:shadow-lg transition-all">
-            <Sparkles className="h-5 w-5 text-primary-foreground" />
+    <Sidebar className="border-r border-sidebar-border" collapsible="icon">
+      {/* Header */}
+      <SidebarHeader className="p-3 pb-2">
+        {isCollapsed ? (
+          <div className="flex flex-col items-center gap-3">
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-md hover:bg-primary/10 text-sidebar-foreground/60 hover:text-primary transition-colors"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-dark">
+              <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
+            </div>
           </div>
-          {!isCollapsed && (
-            <span className="text-lg font-bold text-sidebar-foreground bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent">
-              Clip on Fly
-            </span>
-          )}
-        </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary-dark">
+              <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
+            </div>
+            <span className="flex-1 text-sm font-semibold text-sidebar-foreground">Clip on Fly</span>
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-md hover:bg-primary/10 text-sidebar-foreground/60 hover:text-primary transition-colors"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </SidebarHeader>
 
-      <SidebarContent className="p-3">
-        <SidebarGroup>
+      {/* Nav */}
+      <SidebarContent className="px-2 py-1">
+        <SidebarGroup className="p-0">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1.5">
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+            <SidebarMenu className="gap-0.5">
+              {menuItems.map((item) => {
+                const link = (
                   <SidebarMenuButton asChild>
                     <NavLink
                       to={item.url}
-                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sidebar-foreground transition-all hover:bg-primary/10 hover:text-primary hover:shadow-md group"
-                      activeClassName="bg-primary/10 text-primary font-semibold shadow-sm border border-primary/20"
+                      className={cn(
+                        "flex items-center rounded-md text-sm text-sidebar-foreground/70 hover:bg-primary/10 hover:text-primary transition-colors overflow-hidden",
+                        isCollapsed ? "justify-center p-2" : "gap-2.5 px-2.5 py-2"
+                      )}
+                      activeClassName="bg-primary/10 text-primary font-semibold border border-primary/20"
                     >
-                      <item.icon className="h-5 w-5 transition-transform group-hover:scale-110" />
-                      {!isCollapsed && <span className="text-sm font-medium">{item.title}</span>}
+                      <item.icon className="h-4 w-4 flex-shrink-0" />
+                      {!isCollapsed && <span className="whitespace-nowrap">{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                );
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    {isCollapsed ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>{link}</TooltipTrigger>
+                        <TooltipContent side="right" className="z-[100]">{item.title}</TooltipContent>
+                      </Tooltip>
+                    ) : link}
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      {/* Footer */}
+      <SidebarFooter className="border-t border-sidebar-border p-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-3 w-full hover:bg-sidebar-accent rounded-xl p-2.5 transition-all hover:shadow-sm group focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
-              <Avatar className="h-9 w-9 ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all">
-                <AvatarFallback className="bg-gradient-to-br from-primary to-primary-dark text-primary-foreground text-sm font-semibold">
+            <button
+              className={cn(
+                "flex items-center w-full hover:bg-primary/10 rounded-md transition-colors focus:outline-none",
+                isCollapsed ? "justify-center p-2" : "gap-2.5 px-2 py-2"
+              )}
+            >
+              <Avatar className="h-7 w-7 flex-shrink-0">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary-dark text-primary-foreground text-xs font-semibold">
                   {getUserInitials()}
                 </AvatarFallback>
               </Avatar>
               {!isCollapsed && (
                 <div className="flex flex-col text-left flex-1 min-w-0">
-                  <span className="text-sm font-semibold text-sidebar-foreground truncate">
-                    {currentUser?.displayName || "User"}
+                  <span className="text-xs font-semibold text-sidebar-foreground truncate">
+                    {displayName || "User"}
                   </span>
-                  <span className="text-xs text-sidebar-foreground/60 truncate">
+                  <span className="text-xs text-sidebar-foreground/50 truncate">
                     {currentUser?.email || ""}
                   </span>
                 </div>
@@ -155,26 +173,24 @@ export function AppSidebar() {
           <DropdownMenuContent align="end" className="w-56 shadow-lg">
             <DropdownMenuLabel className="pb-2">
               <div className="flex flex-col gap-1">
-                <span className="font-semibold text-foreground">{currentUser?.displayName || "User"}</span>
-                <span className="text-xs text-muted-foreground font-normal truncate">
-                  {currentUser?.email || ""}
-                </span>
+                <span className="font-semibold text-foreground">{displayName || "User"}</span>
+                <span className="text-xs text-muted-foreground font-normal truncate">{currentUser?.email || ""}</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => navigate("/settings")}
-              className="cursor-pointer gap-2 py-2 hover:bg-primary/10 hover:text-primary hover:shadow-sm focus:bg-primary/10 focus:text-primary transition-all rounded-lg group"
+              className="cursor-pointer gap-2 py-2 hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary transition-colors rounded-md"
             >
-              <User className="h-4 w-4 transition-transform group-hover:scale-110" />
+              <User className="h-4 w-4" />
               <span>Account Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={handleLogout}
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive hover:shadow-sm focus:bg-destructive/10 focus:text-destructive cursor-pointer gap-2 py-2 font-medium transition-all rounded-lg group"
+              className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive cursor-pointer gap-2 py-2 font-medium transition-colors rounded-md"
             >
-              <LogOut className="h-4 w-4 transition-transform group-hover:scale-110" />
+              <LogOut className="h-4 w-4" />
               <span>Sign Out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>

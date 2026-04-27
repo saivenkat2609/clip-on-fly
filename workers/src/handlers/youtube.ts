@@ -34,7 +34,17 @@ export async function handleYouTubeOAuthCallback(request: Request, env: Env): Pr
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
 
-  if (!code || !state) return errorResponse('Missing code or state', 400);
+  const googleError = url.searchParams.get('error');
+
+  // Google returned an error (e.g. access_denied) — redirect user back to frontend
+  if (googleError || !code || !state) {
+    let frontendUrl = 'http://localhost:8080';
+    try {
+      if (state) frontendUrl = JSON.parse(state).frontendUrl || frontendUrl;
+    } catch {}
+    const msg = googleError === 'access_denied' ? 'Authorization denied' : (googleError || 'Missing code or state');
+    return Response.redirect(`${frontendUrl}/auth/youtube/callback?error=${encodeURIComponent(msg)}`, 302);
+  }
 
   let userId: string;
   let frontendUrl: string;

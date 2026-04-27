@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sparkles, Mail, CheckCircle2, XCircle, Info, AlertTriangle } from 'lucide-react';
+import { AppLogo } from '@/components/AppLogo';
+import { Mail, CheckCircle2, XCircle, Info, AlertTriangle } from 'lucide-react';
 import {
   validateEmail,  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
   isDisposableEmail,
@@ -68,12 +69,7 @@ export default function EmailValidator() {
       {/* Navigation */}
       <nav className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4">
-          <Link to="/" className="flex items-center gap-2 w-fit">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold">Clip on Fly</span>
-          </Link>
+          <AppLogo />
         </div>
       </nav>
 

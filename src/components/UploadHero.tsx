@@ -27,10 +27,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { fadeInVariants, bounceVariants, slideUpVariants } from "@/lib/animations";
 
-// Use proxy in development, direct URL in production
-const WORKER_UPLOAD_URL = import.meta.env.MODE === 'development'
-  ? '/upload-proxy'  // Use Vite proxy in development
-  : import.meta.env.VITE_WORKER_UPLOAD_URL;  // Use direct URL in production
+const WORKER_UPLOAD_URL = import.meta.env.VITE_WORKER_UPLOAD_URL;
 
 // Generate UUID (simplified version)
 function generateUUID() {
@@ -478,7 +475,7 @@ export function UploadHero() {
       <Card className="relative z-10 shadow-large border-border/50 overflow-hidden">
         <CardContent className="p-8 md:p-10">
           {/* Brand watermark — 100vw wide, centered on viewport, sits behind the card */}
-          <div
+          {/* <div
             className="pointer-events-none select-none absolute top-1/2 z-0 flex items-center justify-center"
             style={{
               left: "50%",
@@ -490,7 +487,7 @@ export function UploadHero() {
             <span className="text-[16vw] font-black tracking-tighter whitespace-nowrap leading-none text-black/[0.06] dark:text-white/[0.06]">
               Clip on Fly
             </span>
-          </div>
+          </div> */}
           <div className="relative z-10 max-w-3xl mx-auto space-y-6 bg-card rounded-2xl">
             {/* Main Content Box */}
             <div className="bg-gradient-to-br from-primary/5 via-accent/5 to-background rounded-2xl p-6 md:p-8 border border-border/40 shadow-sm hover:shadow-md transition-shadow">

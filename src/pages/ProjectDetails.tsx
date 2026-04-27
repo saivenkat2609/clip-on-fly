@@ -70,7 +70,7 @@ interface Video {
   sessionId: string;
   youtubeUrl: string;
   projectName: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: string;
   createdAt: any;
   completedAt?: any;
   videoInfo?: {
@@ -85,6 +85,19 @@ interface Video {
 
 type FilterType = "all" | "liked" | "disliked" | "edited";
 type SortType = "virality" | "chronological";
+
+function normalizeVideo(row: any): Video {
+  return {
+    ...row,
+    sessionId: row.session_id ?? row.sessionId,
+    youtubeUrl: row.youtube_url ?? row.youtubeUrl,
+    projectName: row.project_name ?? row.projectName,
+    createdAt: row.created_at ?? row.createdAt,
+    completedAt: row.completed_at ?? row.completedAt,
+    videoInfo: row.video_info ?? row.videoInfo,
+    usageTracked: row.usage_tracked ?? row.usageTracked,
+  };
+}
 
 export default function ProjectDetails() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -154,7 +167,9 @@ export default function ProjectDetails() {
   const { refreshStatus, isRefreshing } = useRefreshVideoStatus();
 
   // Real-time WebSocket updates for progress
-  const wsEnabled = !!sessionId && (!video || video?.status === 'processing');
+  const FAILED_STATUSES = ['failed', 'error', 'cancelled'];
+  const isInProgress = (s?: string) => !!s && s !== 'completed' && !FAILED_STATUSES.includes(s);
+  const wsEnabled = !!sessionId && (!video || isInProgress(video?.status));
 
   console.log('[ProjectDetails] WebSocket Config:', {
     sessionId,
@@ -164,7 +179,7 @@ export default function ProjectDetails() {
     timestamp: new Date().toISOString()
   });
 
-  const { status: wsStatus, progress: wsProgress, isConnected } = useVideoStatus({
+  const { status: wsStatus, progress: wsProgress, isConnected, error: wsError } = useVideoStatus({
     sessionId: sessionId || '',
     // Enable WebSocket if we have a sessionId and video is processing OR still loading
     enabled: wsEnabled,
@@ -235,7 +250,7 @@ export default function ProjectDetails() {
     // Initial fetch
     supabase.from('videos').select('*').eq('session_id', sessionId).eq('user_id', currentUser.uid).single()
       .then(({ data: row }) => {
-        if (row) { setVideo(row as any); setLoading(false); previousClipsCount = row.clips?.length || 0; }
+        if (row) { const v = normalizeVideo(row); setVideo(v); setLoading(false); previousClipsCount = v.clips?.length || 0; }
         else { setError('Video not found'); setLoading(false); }
       });
 
@@ -243,7 +258,7 @@ export default function ProjectDetails() {
     const channel = supabase.channel(`video_detail_${sessionId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'videos', filter: `session_id=eq.${sessionId}` },
         (payload) => {
-          const videoData = payload.new as any;
+          const videoData = normalizeVideo(payload.new as any);
           const currentClipsCount = videoData.clips?.length || 0;
           if (currentClipsCount > 0 && previousClipsCount === 0) {
             toast.success(`Processing complete! ${currentClipsCount} clips generated`);
@@ -287,9 +302,8 @@ export default function ProjectDetails() {
           hasTrackedUsageRef.current = true;
           trackingInProgressRef.current = false;
 
-          if (!data.alreadyTracked) {
-            const creditsDeducted = Math.ceil(video.videoInfo!.duration / 60);
-            toast.success(`${creditsDeducted} credits deducted`);
+          if (data.creditsUsed > 0) {
+            toast.success(`${data.creditsUsed} credit${data.creditsUsed !== 1 ? 's' : ''} deducted`);
           }
 
           // Force immediate UI refresh
@@ -302,7 +316,7 @@ export default function ProjectDetails() {
         onError: (error: any) => {
           console.error('[ProjectDetails] Failed to track usage:', error);
           trackingInProgressRef.current = false;
-          toast.error('Failed to deduct credits. Please contact support.');
+          toast.warning('Could not update credit balance. It will sync on next load.');
         },
       }
     );
@@ -317,15 +331,15 @@ export default function ProjectDetails() {
 
   // LAYER 3 RESILIENCE: Check if video is stuck
   const isVideoStuck = useMemo(() => {
-    if (!video || video.status !== 'processing') return false;
+    if (!video || !isInProgress(video.status)) return false;
     if (!video.createdAt) return false;
 
     // Calculate minutes since creation
     const createdDate = video.createdAt.toDate ? video.createdAt.toDate() : new Date(video.createdAt);
     const minutesSinceCreation = (Date.now() - createdDate.getTime()) / 1000 / 60;
 
-    // Consider stuck if processing > 15 minutes
-    return minutesSinceCreation > 15;
+    // Consider stuck if processing > 2 minutes with no update
+    return minutesSinceCreation > 2;
   }, [video?.status, video?.createdAt]);
 
   // LAYER 3 RESILIENCE: Handle refresh status button click
@@ -616,7 +630,7 @@ export default function ProjectDetails() {
   // Determine which stage is currently active
   const getCurrentStageIndex = () => {
     // ALWAYS show downloading stage when video is processing (even without WebSocket)
-    if (video?.status === 'processing') {
+    if (isInProgress(video?.status)) {
       if (!wsStatus || wsStatus === 'pending') {
         console.log('[ProjectDetails] Video is processing, showing downloading stage');
         return 0; // Show downloading by default
@@ -639,6 +653,8 @@ export default function ProjectDetails() {
   };
 
   const currentStageIndex = getCurrentStageIndex();
+  const processingFailed = FAILED_STATUSES.includes(wsStatus) || FAILED_STATUSES.includes(video?.status || '');
+  const processingError = wsError || video?.error || 'Processing failed. Please try again.';
 
   return (
     <AppLayout>
@@ -899,11 +915,9 @@ export default function ProjectDetails() {
                     className={`${
                       video.status === 'completed'
                         ? 'bg-green-500'
-                        : video.status === 'processing'
-                        ? 'bg-blue-500'
                         : video.status === 'failed'
                         ? 'bg-red-500'
-                        : 'bg-gray-500'
+                        : 'bg-blue-500'
                     } text-white`}
                   >
                     {video.status === 'completed'
@@ -920,7 +934,7 @@ export default function ProjectDetails() {
                 </Alert>
               )}
 
-              {video.status === 'processing' && (
+              {(isInProgress(video.status) || processingFailed) && (
                 <Card className="border-border/40 overflow-hidden shadow-lg">
                   <CardContent className="p-0">
                     {/* Header with subtle styling */}
@@ -986,8 +1000,7 @@ export default function ProjectDetails() {
                                 Processing is taking longer than expected
                               </p>
                               <p className="text-xs text-amber-700 dark:text-amber-400">
-                                Your clips may already be ready. Click "Refresh Status" to check if processing has completed.
-                                If clips are ready, they'll appear immediately.
+                                This video may have encountered an issue. Click "Refresh Status" to check the latest state.
                               </p>
                             </div>
                           </div>
@@ -995,122 +1008,99 @@ export default function ProjectDetails() {
                       )}
                     </div>
 
-                    {/* Vertical Stepper - Similar to Reference Image */}
+                    {/* Vertical Stepper */}
                     <div className="p-8 bg-white dark:bg-slate-950">
                       <div className="relative">
                         {processingStages.map((stage, index) => {
                           const StageIcon = stage.icon;
                           const isCompleted = index < currentStageIndex;
                           const isActive = index === currentStageIndex;
-                          const isPending = index > currentStageIndex;
+                          const isStageFailed = processingFailed && isActive;
 
                           return (
                             <div
                               key={stage.id}
                               className="relative flex items-start gap-4 pb-8 last:pb-0"
                             >
-                              {/* Vertical connecting line */}
                               {index < processingStages.length - 1 && (
                                 <div className="absolute left-5 top-12 w-0.5 h-full">
-                                  {/* Background line */}
                                   <div className="absolute inset-0 bg-slate-200 dark:bg-slate-800" />
-
-                                  {/* Animated progress line */}
-                                  <div
-                                    className={`absolute inset-0 transition-all duration-1000 origin-top ${
-                                      isCompleted
-                                        ? 'bg-emerald-500 scale-y-100'
-                                        : 'bg-emerald-500 scale-y-0'
-                                    }`}
-                                  />
+                                  <div className={`absolute inset-0 transition-all duration-1000 origin-top ${isCompleted ? 'bg-emerald-500 scale-y-100' : 'bg-emerald-500 scale-y-0'}`} />
                                 </div>
                               )}
 
-                              {/* Step indicator circle */}
                               <div className="relative flex-shrink-0 z-10">
-                                {/* Active pulse ring */}
-                                {isActive && (
+                                {isActive && !processingFailed && (
                                   <div className="absolute -inset-1 bg-blue-500/20 rounded-full animate-pulse" />
                                 )}
-
-                                <div
-                                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 ${
-                                    isCompleted
-                                      ? 'bg-emerald-500 text-white shadow-md'
-                                      : isActive
-                                      ? 'bg-blue-600 text-white shadow-lg ring-4 ring-blue-100 dark:ring-blue-900/50'
-                                      : 'bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-600'
-                                  }`}
-                                >
-                                  {isCompleted ? (
-                                    <CheckCircle2 className="h-5 w-5" />
-                                  ) : isActive ? (
-                                    <StageIcon className="h-5 w-5" />
-                                  ) : (
-                                    <span className="text-sm font-medium">{index + 1}</span>
-                                  )}
+                                {isStageFailed && (
+                                  <div className="absolute -inset-1 bg-red-500/20 rounded-full" />
+                                )}
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 ${
+                                  isStageFailed ? 'bg-red-500 text-white shadow-md'
+                                  : isCompleted ? 'bg-emerald-500 text-white shadow-md'
+                                  : isActive ? 'bg-blue-600 text-white shadow-lg ring-4 ring-blue-100 dark:ring-blue-900/50'
+                                  : 'bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-600'
+                                }`}>
+                                  {isStageFailed ? <X className="h-5 w-5" />
+                                  : isCompleted ? <CheckCircle2 className="h-5 w-5" />
+                                  : isActive ? <StageIcon className="h-5 w-5" />
+                                  : <span className="text-sm font-medium">{index + 1}</span>}
                                 </div>
                               </div>
 
-                              {/* Step content */}
                               <div className="flex-1 pt-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span
-                                    className={`text-xs font-medium uppercase tracking-wider ${
-                                      isCompleted
-                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                        : isActive
-                                        ? 'text-blue-600 dark:text-blue-400'
-                                        : 'text-slate-400 dark:text-slate-600'
-                                    }`}
-                                  >
+                                  <span className={`text-xs font-medium uppercase tracking-wider ${
+                                    isStageFailed ? 'text-red-600 dark:text-red-400'
+                                    : isCompleted ? 'text-emerald-600 dark:text-emerald-400'
+                                    : isActive ? 'text-blue-600 dark:text-blue-400'
+                                    : 'text-slate-400 dark:text-slate-600'
+                                  }`}>
                                     Step {index + 1}
                                   </span>
-                                  {isActive && (
-                                    <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
-                                  )}
+                                  {isActive && !processingFailed && <Loader2 className="h-3 w-3 animate-spin text-blue-600" />}
                                 </div>
-                                <h4
-                                  className={`font-semibold transition-all duration-300 ${
-                                    isCompleted
-                                      ? 'text-foreground'
-                                      : isActive
-                                      ? 'text-foreground text-base'
-                                      : 'text-slate-400 dark:text-slate-600'
-                                  }`}
-                                >
+                                <h4 className={`font-semibold transition-all duration-300 ${
+                                  isStageFailed ? 'text-red-600 dark:text-red-400'
+                                  : isCompleted || isActive ? 'text-foreground'
+                                  : 'text-slate-400 dark:text-slate-600'
+                                }`}>
                                   {stage.label}
                                 </h4>
-                                {isActive && (
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    Processing now...
-                                  </p>
-                                )}
-                                {isCompleted && (
-                                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                                    ✓ Completed
-                                  </p>
-                                )}
+                                {isActive && !processingFailed && <p className="text-sm text-muted-foreground mt-1">Processing now...</p>}
+                                {isStageFailed && <p className="text-xs text-red-600 dark:text-red-400 mt-1">✗ Failed</p>}
+                                {isCompleted && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">✓ Completed</p>}
                               </div>
                             </div>
                           );
                         })}
                       </div>
+
+                      {processingFailed && (
+                        <div className="mt-4 p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-red-900 dark:text-red-200">Processing failed</p>
+                              <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">{processingError}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Footer - Clean */}
+                    {/* Footer */}
                     <div className="bg-slate-50 dark:bg-slate-900/30 px-6 py-3 border-t border-border/40">
                       <div className="flex items-center gap-4 text-sm">
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                          <div className={`w-2 h-2 rounded-full ${processingFailed ? 'bg-red-500' : isConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
                           <span className="text-slate-600 dark:text-slate-400">
-                            {isConnected ? 'Connected' : 'Connecting...'}
+                            {processingFailed ? 'Failed' : isConnected ? 'Connected' : 'Connecting...'}
                           </span>
                         </div>
-                        {isAdmin && (
-                          <span className="text-slate-500 dark:text-slate-500 text-xs">
-                            Clips will appear as they're ready
-                          </span>
+                        {isAdmin && !processingFailed && (
+                          <span className="text-slate-500 dark:text-slate-500 text-xs">Clips will appear as they're ready</span>
                         )}
                       </div>
                     </div>
@@ -1217,31 +1207,35 @@ export default function ProjectDetails() {
                   <Card
                     className="group overflow-hidden shadow-medium hover:shadow-large transition-shadow h-full"
                   >
-                  <div className="relative h-80 bg-black flex items-center justify-center">
-                    <div className="h-full aspect-[9/16] relative overflow-hidden">
-                      <VideoThumbnail
-                        key={`${clip.clipIndex}-${clip.reprocessedAt || clip.lastUpdated || clip.downloadUrl}`}
-                        videoUrl={clip.downloadUrl}
-                        alt={clip.title || `${videoTitle}`}
-                        onClick={() => {
-                          setPreviewVideo({
-                            url: clip.downloadUrl,
-                            title: clip.title || `${videoTitle}`,
-                            index: clip.clipIndex
-                          });
-                        }}
-                        showPlayButton={true}
-                        cachedThumbnail={clip.cachedThumbnail}
-                        onThumbnailGenerated={(thumbnailUrl, timestamp) =>
-                          handleThumbnailGenerated(clip.clipIndex, thumbnailUrl, timestamp)
-                        }
-                      />
-                    </div>
+                  <div className="relative h-80 overflow-hidden">
+                    <VideoThumbnail
+                      key={`${clip.clipIndex}-${clip.reprocessedAt || clip.lastUpdated || clip.downloadUrl}`}
+                      videoUrl={clip.downloadUrl}
+                      alt={clip.title || `${videoTitle}`}
+                      onClick={() => {
+                        setPreviewVideo({
+                          url: clip.downloadUrl,
+                          title: clip.title || `${videoTitle}`,
+                          index: clip.clipIndex
+                        });
+                      }}
+                      showPlayButton={true}
+                      cachedThumbnail={clip.cachedThumbnail}
+                      onThumbnailGenerated={(thumbnailUrl, timestamp) =>
+                        handleThumbnailGenerated(clip.clipIndex, thumbnailUrl, timestamp)
+                      }
+                    />
                     {clip.virality_score !== undefined && (
                       <div className="absolute top-2 left-2 z-10">
-                        <span className="text-sm font-bold text-green-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                          🔥 {clip.virality_score}
-                        </span>
+                        <div className={`flex items-center gap-1 bg-black/75 backdrop-blur-sm text-xs font-bold px-2 py-1 rounded-full border shadow-lg ${
+                          clip.virality_score >= 75
+                            ? 'text-green-400 border-green-500/40'
+                            : clip.virality_score >= 40
+                            ? 'text-amber-400 border-amber-500/40'
+                            : 'text-red-400 border-red-500/40'
+                        }`}>
+                          {clip.virality_score >= 75 ? '🔥' : clip.virality_score >= 40 ? '⚡' : '❄️'} <span>{clip.virality_score}</span>
+                        </div>
                       </div>
                     )}
                     {/* Duration overlay at bottom-right */}
@@ -1357,7 +1351,7 @@ export default function ProjectDetails() {
                             ) : (
                               <>
                                 <Palette className="h-3 w-3 mr-1" />
-                                Change Font
+                                Change Style
                               </>
                             )}
                           </Button>
@@ -1407,7 +1401,7 @@ export default function ProjectDetails() {
                             ) : (
                               <>
                                 <Palette className="h-3 w-3 mr-1" />
-                                Change Font
+                                Change Style
                               </>
                             )}
                           </Button>

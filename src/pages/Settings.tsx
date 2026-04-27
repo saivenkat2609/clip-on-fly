@@ -84,11 +84,11 @@ export default function Settings() {
   const { data: realtimeProfile } = useUserProfileRealtime();
   const isAdmin = realtimeProfile?.role === 'admin';
 
-  // Load user profile data from cached hook
+  // Load user profile data — DB display_name is source of truth (never overwritten by OAuth)
   useEffect(() => {
     if (profile) {
-      const displayName = currentUser?.displayName || '';
-      const names = displayName.split(' ');
+      const displayName = profile.displayName || currentUser?.displayName || '';
+      const names = displayName.trim().split(' ');
       const fName = names[0] || '';
       const lName = names.length > 1 ? names[names.length - 1] : '';
 
@@ -169,7 +169,7 @@ export default function Settings() {
         : firstName.trim();
 
       await supabase.from('users').update({ display_name: displayName }).eq('id', currentUser.uid);
-      await supabase.auth.updateUser({ data: { display_name: displayName } });
+      await supabase.auth.updateUser({ data: { full_name: displayName, display_name: displayName } });
 
       // Normalize values
       const normalizedFirstName = firstName.trim();
@@ -228,7 +228,7 @@ export default function Settings() {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!currentPassword || !newPassword || !confirmNewPassword) {
+    if (!newPassword || !confirmNewPassword) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -245,8 +245,7 @@ export default function Settings() {
 
     setPasswordLoading(true);
     try {
-      await changePassword(currentPassword, newPassword);
-      setCurrentPassword('');
+      await changePassword(newPassword);
       setNewPassword('');
       setConfirmNewPassword('');
       toast.success('Password updated successfully!');
@@ -285,10 +284,16 @@ export default function Settings() {
       await linkPasswordProvider(newPassword);
       setNewPassword('');
       setConfirmNewPassword('');
-      setHasPasswordProvider(true);
-      toast.success('Backup password set successfully!');
+      toast.success('Password set successfully!');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to set backup password');
+      // If Supabase says "same as old password", user already has one — mark the flag and switch UI
+      if (error.message?.toLowerCase().includes('different from the old password') || error.message?.toLowerCase().includes('same password')) {
+        await supabase.auth.updateUser({ data: { has_password: true } });
+        await refreshUser();
+        toast.error('New password must be different from your current password.');
+      } else {
+        toast.error(error.message || 'Failed to set password');
+      }
     } finally {
       setPasswordLoading(false);
     }
@@ -602,7 +607,7 @@ export default function Settings() {
                   </RadioGroup>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-border">
+                <div className="flex justify-end pt-2">
                   <p className="text-sm text-muted-foreground">
                     Theme changes are applied instantly
                   </p>
@@ -867,21 +872,6 @@ export default function Settings() {
                 ) : (
                   // Change password form for users with password (password-only OR Google+password)
                   <form onSubmit={handlePasswordChange} className="space-y-4">
-                    <div>
-                      <Label htmlFor="currentPassword">Current Password</Label>
-                      <Input
-                        id="currentPassword"
-                        type="password"
-                        placeholder="Enter current password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        disabled={passwordLoading}
-                        className="mt-2"
-                      />
-                    </div>
-
-                    <Separator />
-
                     <PasswordInput
                       label="New Password"
                       value={newPassword}
@@ -919,7 +909,6 @@ export default function Settings() {
                         type="submit"
                         disabled={
                           passwordLoading ||
-                          !currentPassword ||
                           !newPassword ||
                           !confirmNewPassword ||
                           newPassword !== confirmNewPassword ||
@@ -930,11 +919,10 @@ export default function Settings() {
                         {passwordLoading ? 'Updating...' : 'Update Password'}
                       </Button>
                     </div>
-                    {!passwordLoading && (isNewPasswordBreached || newPassword.length < 8 || newPassword !== confirmNewPassword) && newPassword && (
+                    {!passwordLoading && newPassword && (isNewPasswordBreached || newPassword.length < 8) && (
                       <p className="text-xs text-center text-muted-foreground">
                         {isNewPasswordBreached && '⚠️ Cannot use breached password'}
                         {!isNewPasswordBreached && newPassword.length < 8 && '⚠️ Password must be at least 8 characters'}
-                        {!isNewPasswordBreached && newPassword.length >= 8 && newPassword !== confirmNewPassword && '⚠️ Passwords must match'}
                       </p>
                     )}
                   </form>
@@ -954,16 +942,17 @@ export default function Settings() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* Google Sign-in Method */}
-                <SignInMethodCard
-                  provider="google"
-                  connected={linkedProviders.google}
-                  email={linkedProviders.google ? currentUser?.email : undefined}
-                  onLink={handleLinkGoogle}
-                  onUnlink={() => handleUnlinkProvider('google.com')}
-                  loading={linkingLoading}
-                  disableUnlink={hasOnlyOneMethod}
-                />
+                {/* Google Sign-in Method — only show if not yet connected (email users can link) */}
+                {!linkedProviders.google && (
+                  <SignInMethodCard
+                    provider="google"
+                    connected={false}
+                    onLink={handleLinkGoogle}
+                    onUnlink={() => {}}
+                    loading={linkingLoading}
+                    disableUnlink={true}
+                  />
+                )}
 
                 {/* Password Sign-in Method */}
                 <SignInMethodCard

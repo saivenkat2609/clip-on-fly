@@ -13,6 +13,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 // Lazy load all route components for optimal code splitting
 // Each route will be loaded only when accessed, reducing initial bundle size
 const Landing = lazy(() => import("./pages/Landing"));
+const About = lazy(() => import("./pages/About"));
+const Social = lazy(() => import("./pages/Social"));
 const Features = lazy(() => import("./pages/Features"));
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -80,6 +82,7 @@ const App = () => (
               <Route path="/refund" element={<RefundPolicy />} />
               <Route path="/shipping" element={<ShippingPolicy />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/about" element={<About />} />
 
                   {/* Protected routes */}
                   <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -91,6 +94,7 @@ const App = () => (
                   <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
                   <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                   <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
+                  <Route path="/social" element={<ProtectedRoute><Social /></ProtectedRoute>} />
                   <Route path="/auth/youtube/callback" element={<ProtectedRoute><YouTubeCallback /></ProtectedRoute>} />
 
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

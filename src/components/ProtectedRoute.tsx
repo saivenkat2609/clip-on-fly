@@ -32,8 +32,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!currentUser) {
-    // Redirect to login but save the location they were trying to access
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
   return <>{children}</>;

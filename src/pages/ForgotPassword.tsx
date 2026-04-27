@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Mail, ArrowLeft, CheckCircle2, AlertCircle, Chrome, Info } from 'lucide-react';
+import { AppLogo } from '@/components/AppLogo';
+import { Mail, ArrowLeft, CheckCircle2, AlertCircle, Chrome, Info } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
 
 export default function ForgotPassword() {
@@ -65,12 +66,7 @@ export default function ForgotPassword() {
       {/* Navigation */}
       <nav className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4">
-          <Link to="/" className="flex items-center gap-2 w-fit">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold">Clip on Fly</span>
-          </Link>
+          <AppLogo />
         </div>
       </nav>
 

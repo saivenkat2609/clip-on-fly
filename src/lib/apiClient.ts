@@ -27,10 +27,7 @@ class APIClient {
   private defaultCacheTTL: number = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
-    // Use proxy in development, direct URL in production
-    this.baseURL = import.meta.env.MODE === 'development'
-      ? '/api'  // Use Vite proxy in development (hides backend URL)
-      : import.meta.env.VITE_API_ENDPOINT;  // Use direct URL in production
+    this.baseURL = import.meta.env.VITE_API_ENDPOINT;
 
     this.cache = new Map();
     this.inFlightRequests = new Map();

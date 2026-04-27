@@ -16,8 +16,8 @@ import {
   getLocationFromIP,
 } from '@/lib/sessionManager';
 
-// Extend Supabase User to include .uid alias so rest of app doesn't need to change
-type AppUser = User & { uid: string };
+// Extend Supabase User to include .uid alias and .displayName extracted from user_metadata
+type AppUser = User & { uid: string; displayName: string | null };
 
 interface AuthContextType {
   currentUser: AppUser | null;
@@ -30,7 +30,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   changeEmail: (newEmail: string, currentPassword: string) => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  changePassword: (newPassword: string) => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
   refreshUser: () => Promise<void>;
   unlinkProvider: (providerId: 'google.com' | 'password') => Promise<void>;
@@ -52,8 +52,10 @@ interface AuthProviderProps {
 }
 
 function toAppUser(user: User): AppUser {
-  // Map Supabase's .id to .uid so the rest of the app stays unchanged
-  return { ...user, uid: user.id };
+  const meta = user.user_metadata ?? {};
+  // Google sets full_name; email sign-up stores full_name or display_name in metadata
+  const displayName = meta.full_name ?? meta.name ?? meta.display_name ?? null;
+  return { ...user, uid: user.id, displayName };
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -129,7 +131,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: window.location.href,
         queryParams: { prompt: 'select_account' },
       },
     });
@@ -188,20 +190,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     toast({ title: 'Email updated', description: 'A verification email has been sent to your new address.' });
   }
 
-  async function changePassword(currentPassword: string, newPassword: string) {
+  async function changePassword(newPassword: string) {
     if (!currentUser) throw new Error('No user is currently signed in');
-
-    // Re-verify identity
-    const { error: reAuthError } = await supabase.auth.signInWithPassword({
-      email: currentUser.email!,
-      password: currentPassword,
-    });
-    if (reAuthError) throw new Error('Current password is incorrect');
 
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) throw new Error(error.message);
-
-    toast({ title: 'Password updated', description: 'Your password has been successfully changed.' });
   }
 
   async function resendVerificationEmail() {
@@ -224,7 +217,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const identities = currentUser.identities ?? [];
     return {
       google: identities.some(i => i.provider === 'google'),
-      password: identities.some(i => i.provider === 'email'),
+      // updateUser({ password }) doesn't add an email identity, so also check metadata flag
+      password: identities.some(i => i.provider === 'email') || currentUser.user_metadata?.has_password === true,
     };
   }
 
@@ -241,10 +235,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!currentUser?.email) throw new Error('No user is currently signed in');
     if (password.length < 8) throw new Error('Password must be at least 8 characters');
 
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await supabase.auth.updateUser({ password, data: { has_password: true } });
     if (error) throw new Error(error.message);
 
-    toast({ title: 'Password added successfully!', description: 'You can now sign in using your password or Google.' });
+    await refreshUser();
   }
 
   async function unlinkProvider(providerId: 'google.com' | 'password') {
@@ -257,12 +251,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const identities = currentUser.identities ?? [];
     const supabaseProvider = providerId === 'google.com' ? 'google' : 'email';
     const identity = identities.find(i => i.provider === supabaseProvider);
+
+    if (!identity && providerId === 'password') {
+      // Password was added via updateUser (no email identity) — invalidate it with a random unknown password
+      const randomPassword = crypto.randomUUID() + Date.now().toString(36) + '!A1x';
+      const { error } = await supabase.auth.updateUser({ password: randomPassword, data: { has_password: false } });
+      if (error) throw new Error(error.message);
+      await refreshUser();
+      return;
+    }
+
     if (!identity) throw new Error('Provider not linked to this account');
 
     const { error } = await supabase.auth.unlinkIdentity(identity);
     if (error) throw new Error(error.message);
 
-    toast({ title: `${providerId === 'google.com' ? 'Google' : 'Password'} unlinked` });
     await refreshUser();
   }
 

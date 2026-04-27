@@ -14,7 +14,7 @@ export async function handleTrackVideoUsage(request: Request, env: Env): Promise
 
   // Check if already tracked to prevent double-charging
   const { data: video } = await supabase
-    .from('videos').select('usage_tracked').eq('id', sessionId).single();
+    .from('videos').select('usage_tracked').eq('session_id', sessionId).single();
 
   if (!video) return errorResponse('Video not found', 404);
 
@@ -31,7 +31,7 @@ export async function handleTrackVideoUsage(request: Request, env: Env): Promise
   await supabase.from('videos').update({
     usage_tracked: true,
     usage_tracked_at: new Date().toISOString(),
-  }).eq('id', sessionId);
+  }).eq('session_id', sessionId);
 
   const { data: userData } = await supabase
     .from('users').select('credits_used, total_credits, plan, subscription_id').eq('id', userId).single();

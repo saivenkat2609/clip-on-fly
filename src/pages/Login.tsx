@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { AppLogo } from '@/components/AppLogo';
 import { Sparkles, Mail, Lock, Chrome, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import { validateEmail } from '@/lib/emailValidator';  // HIGH PRIORITY FIX #11: Removed Gmail-only restriction
 import { supabase } from '@/lib/supabase';
@@ -110,7 +111,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = (location.state as any)?.from?.pathname || '/dashboard';
+  const from = new URLSearchParams(location.search).get('redirect') || '/dashboard';
 
   // Reset forms when switching between login/signup
   useEffect(() => {
@@ -142,7 +143,6 @@ export default function Login() {
     // 2. User is authenticated
     // 3. Not currently processing a login/signup action
     if (!authLoading && currentUser && !googleLoading && !loading) {
-      // Check if user should be redirected to billing (from landing page)
       const shouldRedirectToBilling = sessionStorage.getItem('redirectToBilling');
       if (shouldRedirectToBilling === 'true') {
         sessionStorage.removeItem('redirectToBilling');
@@ -626,14 +626,7 @@ export default function Login() {
       {/* Navigation */}
       <nav className="absolute top-0 left-0 right-0 z-10 bg-transparent">
         <div className="container mx-auto px-6 py-6">
-          <Link to="/" className="flex items-center gap-2 w-fit">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold text-foreground">
-              Clip on Fly
-            </span>
-          </Link>
+          <AppLogo />
         </div>
       </nav>
 

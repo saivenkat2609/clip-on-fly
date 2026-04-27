@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Footer } from "@/components/layout/Footer";
 import { PricingPlans } from "@/components/PricingPlans";
+import { AppLogo } from "@/components/AppLogo";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -151,12 +152,7 @@ export default function Landing() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold">Clip on Fly</span>
-            </div>
+            <AppLogo />
 
             {/* Navigation Links - Hidden on mobile */}
             <div className="hidden md:flex items-center gap-1 bg-muted/50 rounded-lg p-1">
@@ -285,7 +281,7 @@ export default function Landing() {
 
               <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
                 Turn Long Videos Into
-                <span className="block bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-gradient-x">
+                <span className="block bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-gradient-x pb-2">
                   Viral Short Clips
                 </span>
               </h1>
@@ -323,6 +319,10 @@ export default function Landing() {
                     size="lg"
                     variant="outline"
                     className="text-lg h-16 px-10 font-semibold border-2 border-primary/30 hover:bg-primary/10 hover:border-primary hover:text-primary transition-all"
+                    onClick={() => {
+                      const el = document.getElementById('demo');
+                      if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+                    }}
                   >
                     <Video className="h-5 w-5 mr-2" />
                     Watch Demo
@@ -906,6 +906,10 @@ export default function Landing() {
                     size="lg"
                     variant="outline"
                     className="text-lg h-16 px-10 font-semibold bg-white/10 border-2 border-white/30 text-white hover:bg-white/25 hover:border-white/60 backdrop-blur-sm transition-all"
+                    onClick={() => {
+                      const el = document.getElementById('demo');
+                      if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+                    }}
                   >
                     <Video className="h-5 w-5 mr-2" />
                     Watch Demo

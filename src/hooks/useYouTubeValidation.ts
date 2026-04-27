@@ -10,7 +10,6 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { apiClient } from '@/lib/apiClient';
 import { useRemainingCredits } from './useRemainingCredits';
 
 interface ValidationResult {
@@ -158,20 +157,26 @@ export function useYouTubeValidation(url: string): ValidationResult {
           },
         });
 
-        // Stage 3: Now call backend for full validation (duration, credits)
+        // Stage 3: Full validation (duration, credits) via production API
         try {
           const abortController = new AbortController();
           abortControllerRef.current = abortController;
 
-          const backendValidation = await apiClient.get(
-            `/validate-youtube?url=${encodeURIComponent(url)}`,
+          const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
+          const res = await fetch(
+            `${import.meta.env.VITE_API_ENDPOINT}/validate-youtube?url=${encodeURIComponent(url)}`,
             {
-              skipCache: true,
-              signal: abortController.signal
+              headers: {
+                'Authorization': `Bearer ${session?.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              signal: abortController.signal,
             }
           );
 
-          // Update with full validation data from backend
+          if (!res.ok) throw new Error('Backend validation failed');
+          const backendValidation = await res.json();
+
           if (backendValidation.isValid) {
             setValidationResult({
               isValid: true,
@@ -181,7 +186,6 @@ export function useYouTubeValidation(url: string): ValidationResult {
               validation: backendValidation.validation,
             });
           } else {
-            // Backend validation failed (too long, too short, etc.)
             setValidationResult({
               isValid: false,
               error: backendValidation.error,
@@ -193,12 +197,7 @@ export function useYouTubeValidation(url: string): ValidationResult {
 
           setIsValidating(false);
         } catch (backendError: any) {
-          // Backend validation failed, but oEmbed succeeded
-          // Keep the oEmbed data but show warning
-          if (backendError.name === 'AbortError') {
-            // Request was cancelled, ignore
-            return;
-          }
+          if (backendError.name === 'AbortError') return;
 
           console.error('[Validation] Backend validation failed:', backendError);
           setValidationResult({
